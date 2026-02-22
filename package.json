@@ -1,12 +1,27 @@
 {
-  "name": "jam-session",
+  "name": "beatcord",
   "version": "1.0.0",
-  "description": "Real-time collaborative step sequencer",
-  "main": "server.js",
+  "private": true,
+  "description": "Real-time collaborative step sequencer — the group chat of beats",
   "scripts": {
-    "start": "node server.js"
+    "dev:server": "pnpm --filter @beatcord/server dev",
+    "dev:client": "pnpm --filter @beatcord/client dev",
+    "dev": "pnpm --filter @beatcord/shared build && concurrently \"pnpm dev:server\" \"pnpm dev:client\"",
+    "build": "pnpm --filter @beatcord/shared build && pnpm --filter @beatcord/client build && pnpm --filter @beatcord/server build",
+    "start": "node packages/server/dist/index.js",
+    "lint": "eslint packages --ext .ts,.vue",
+    "test": "vitest run",
+    "typecheck": "pnpm -r typecheck"
   },
-  "dependencies": {
-    "ws": "^8.16.0"
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "concurrently": "^8.2.0",
+    "eslint": "^8.57.0",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }
