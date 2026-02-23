@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { PublicUser } from '@beatcord/shared';
+import type { PublicUser, SeqState, SynthState } from '@beatcord/shared';
 
 export const useRoomStore = defineStore('room', () => {
   const otherUsers = ref<Map<string, PublicUser>>(new Map());
@@ -29,6 +29,16 @@ export const useRoomStore = defineStore('room', () => {
     activeSteps.value.set(userId, step);
   }
 
+  function updateUserSeq(userId: string, seq: SeqState) {
+    const u = otherUsers.value.get(userId);
+    if (u) u.seq = seq;
+  }
+
+  function updateUserSynth(userId: string, synth: SynthState) {
+    const u = otherUsers.value.get(userId);
+    if (u) u.synth = synth;
+  }
+
   function reset() {
     otherUsers.value.clear();
     activeSteps.value.clear();
@@ -42,6 +52,8 @@ export const useRoomStore = defineStore('room', () => {
     addUser,
     removeUser,
     setActiveStep,
+    updateUserSeq,
+    updateUserSynth,
     reset,
   };
 });

@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { StepData, StepCountOption, SubdivOption } from '@beatcord/shared';
+import type { StepData, StepCountOption, SubdivOption, SeqState, NoteData } from '@beatcord/shared';
 
 function makeSteps(count: number): StepData[] {
   return Array.from({ length: count }, () => ({ notes: [] }));
@@ -28,6 +28,53 @@ export const useSequencerStore = defineStore('sequencer', () => {
     }
   }
 
+  function toggleNote(stepIndex: number, midi: number, velocity = 100, length = 0.8) {
+    const step = steps.value[stepIndex];
+    if (!step) return;
+    const idx = step.notes.findIndex((n) => n.midi === midi);
+    if (idx >= 0) {
+      step.notes.splice(idx, 1);
+    } else {
+      step.notes.push({ midi, velocity, length });
+    }
+  }
+
+  function addNote(stepIndex: number, midi: number, velocity = 100, length = 0.8) {
+    const step = steps.value[stepIndex];
+    if (!step) return;
+    if (step.notes.some((n) => n.midi === midi)) return;
+    step.notes.push({ midi, velocity, length });
+  }
+
+  function removeNote(stepIndex: number, midi: number) {
+    const step = steps.value[stepIndex];
+    if (!step) return;
+    const idx = step.notes.findIndex((n) => n.midi === midi);
+    if (idx >= 0) step.notes.splice(idx, 1);
+  }
+
+  function setNoteVelocity(stepIndex: number, velocity: number) {
+    const step = steps.value[stepIndex];
+    if (!step) return;
+    step.notes.forEach((n) => { n.velocity = velocity; });
+  }
+
+  function setNoteLength(stepIndex: number, length: number) {
+    const step = steps.value[stepIndex];
+    if (!step) return;
+    step.notes.forEach((n) => { n.length = length; });
+  }
+
+  function getSeqState(): SeqState {
+    return {
+      steps: steps.value,
+      stepCount: stepCount.value,
+      bpm: bpm.value,
+      subdiv: subdiv.value,
+      playing: playing.value,
+    };
+  }
+
   return {
     steps,
     stepCount,
@@ -37,5 +84,11 @@ export const useSequencerStore = defineStore('sequencer', () => {
     currentStep,
     clear,
     setStepCount,
+    toggleNote,
+    addNote,
+    removeNote,
+    setNoteVelocity,
+    setNoteLength,
+    getSeqState,
   };
 });
