@@ -21,6 +21,7 @@ export type {
   SynthUpdateMessage,
   StepTickMessage,
   PingMessage,
+  ChatMessage,
   ClientMessage,
   WelcomeMessage,
   UserJoinedMessage,
@@ -30,5 +31,6 @@ export type {
   ServerStepTickMessage,
   KickedMessage,
   UsersUpdateMessage,
+  ServerChatMessage,
   ServerMessage,
 } from './types/messages.js';

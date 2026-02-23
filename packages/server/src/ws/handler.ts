@@ -5,6 +5,8 @@ import { users, generateId, getPublicUsers, type ServerUser } from '../state/use
 import { defaultSeqState, defaultSynthState } from '../state/defaults.js';
 import { broadcast, broadcastAll } from './broadcast.js';
 
+const MAX_CHAT_LENGTH = 500;
+
 // ── Inactivity management ────────────────────────────────────
 
 function resetInactivityTimer(user: ServerUser): void {
@@ -81,6 +83,21 @@ function handleStepTick(userId: string, step: number, hasNotes: boolean): void {
   broadcast({ type: 'step_tick', userId, step, hasNotes }, userId);
 }
 
+function handleChat(userId: string, text: string): void {
+  const user = users.get(userId);
+  if (!user) return;
+  const sanitised = text.trim().slice(0, MAX_CHAT_LENGTH);
+  if (!sanitised) return;
+  // Broadcast to ALL users (including sender) so they see confirmation
+  broadcastAll({
+    type: 'chat',
+    userId,
+    name: user.name,
+    text: sanitised,
+    timestamp: Date.now(),
+  });
+}
+
 // ── Connection handler ───────────────────────────────────────
 
 export function handleConnection(ws: WebSocket): void {
@@ -122,6 +139,10 @@ export function handleConnection(ws: WebSocket): void {
 
       case 'ping':
         // Keep-alive / activity update — handled by resetInactivityTimer above
+        break;
+
+      case 'chat':
+        handleChat(userId, msg.text);
         break;
     }
   });

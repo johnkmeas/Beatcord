@@ -29,12 +29,18 @@ export interface PingMessage {
   type: 'ping';
 }
 
+export interface ChatMessage {
+  type: 'chat';
+  text: string;
+}
+
 export type ClientMessage =
   | JoinMessage
   | SequencerUpdateMessage
   | SynthUpdateMessage
   | StepTickMessage
-  | PingMessage;
+  | PingMessage
+  | ChatMessage;
 
 // ── Server → Client ─────────────────────────────────────────
 
@@ -83,6 +89,14 @@ export interface UsersUpdateMessage {
   users: PublicUser[];
 }
 
+export interface ServerChatMessage {
+  type: 'chat';
+  userId: string;
+  name: string;
+  text: string;
+  timestamp: number;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | UserJoinedMessage
@@ -91,4 +105,5 @@ export type ServerMessage =
   | ServerSynthUpdateMessage
   | ServerStepTickMessage
   | KickedMessage
-  | UsersUpdateMessage;
+  | UsersUpdateMessage
+  | ServerChatMessage;
