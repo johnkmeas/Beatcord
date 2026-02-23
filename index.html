@@ -1251,7 +1251,8 @@ function syncScroll() {
 // WEBSOCKET
 // ============================================================
 function connectWS(name) {
-  ws = new WebSocket(`ws://${location.host}`);
+  const protocol = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${protocol}://${location.host}/ws`);
   ws.onopen = () => ws.send(JSON.stringify({ type: 'join', name }));
   ws.onmessage = e => handleMsg(JSON.parse(e.data));
   ws.onclose = () => toast('Connection lost — reload to reconnect.', '#ff6b6b');

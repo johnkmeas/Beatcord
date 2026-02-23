@@ -2,28 +2,27 @@ import { shallowRef, ref } from 'vue';
 import type { ClientMessage, ServerMessage, PublicUser, SeqState, SynthState } from '@beatcord/shared';
 import { useSessionStore } from '@/stores/session';
 import { useRoomStore } from '@/stores/room';
-import { useSequencerStore } from '@/stores/sequencer';
-import { useSynthStore } from '@/stores/synth';
 import { useAudioEngine } from '@/composables/useAudioEngine';
 import { useToast } from '@/composables/useToast';
+import { useChatStore } from '@/stores/chat';
+
+// ── Module-level singleton state ──────────────────────────────
+const ws = shallowRef<WebSocket | null>(null);
+const connected = ref(false);
+const reconnectAttempts = ref(0);
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let pingTimer: ReturnType<typeof setInterval> | null = null;
 
 export function useWebSocket() {
-  const ws = shallowRef<WebSocket | null>(null);
-  const connected = ref(false);
-  const reconnectAttempts = ref(0);
-  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  let pingTimer: ReturnType<typeof setInterval> | null = null;
-
   const session = useSessionStore();
   const room = useRoomStore();
-  const seq = useSequencerStore();
-  const synth = useSynthStore();
   const audio = useAudioEngine();
   const { show } = useToast();
+  const chat = useChatStore();
 
   function wsUrl(): string {
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${proto}//${window.location.host}`;
+    return `${proto}//${window.location.host}/ws`;
   }
 
   function connect(name: string) {
@@ -37,9 +36,7 @@ export function useWebSocket() {
     ws.value.onopen = () => {
       connected.value = true;
       reconnectAttempts.value = 0;
-      // Identify to server
       send({ type: 'join', name });
-      // Start heartbeat pings
       if (pingTimer) clearInterval(pingTimer);
       pingTimer = setInterval(() => send({ type: 'ping' }), 30_000);
       session.isConnected = true;
@@ -69,7 +66,7 @@ export function useWebSocket() {
   }
 
   function scheduleReconnect(name: string) {
-    if (reconnectTimer) return; // already scheduled
+    if (reconnectTimer) return;
     const delay = Math.min(1000 * 2 ** reconnectAttempts.value, 30_000);
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
@@ -91,15 +88,17 @@ export function useWebSocket() {
     }
   }
 
-  function setUsers(users: PublicUser[], myId: string) {
-    room.setUsers(users, myId);
+  function sendChat(text: string) {
+    const trimmed = text.trim().slice(0, 500);
+    if (!trimmed) return;
+    send({ type: 'chat', text: trimmed });
   }
 
   function handleMessage(msg: ServerMessage) {
     switch (msg.type) {
       case 'welcome': {
         session.userId = msg.userId;
-        setUsers(msg.users, msg.userId);
+        room.setUsers(msg.users, msg.userId);
         break;
       }
       case 'user_joined': {
@@ -115,33 +114,35 @@ export function useWebSocket() {
       }
       case 'users_update': {
         if (!session.userId) break;
-        setUsers(msg.users, session.userId);
+        room.setUsers(msg.users, session.userId);
         break;
       }
       case 'sequencer_update': {
-        // Update other user's sequencer state snapshot
         const u = room.otherUsers.get(msg.userId);
-        if (u) {
-          u.seq = msg.seq as SeqState;
-        }
+        if (u) u.seq = msg.seq as SeqState;
         break;
       }
       case 'synth_update': {
         const u = room.otherUsers.get(msg.userId);
-        if (u) {
-          u.synth = msg.synth as SynthState;
-        }
+        if (u) u.synth = msg.synth as SynthState;
         break;
       }
       case 'step_tick': {
-        // Update remote playhead and optionally play their notes locally
         room.setActiveStep(msg.userId, msg.step);
         const u = room.otherUsers.get(msg.userId);
         if (u && u.seq && msg.hasNotes) {
           const ctx = audio.init();
-          const when = ctx.currentTime; // immediate — remote scheduling is advisory only
-          audio.playStep(u.seq.steps[msg.step], u.synth, when, u.seq.bpm, u.seq.subdiv || 4);
+          audio.playStep(u.seq.steps[msg.step], u.synth, ctx.currentTime, u.seq.bpm, u.seq.subdiv || 4);
         }
+        break;
+      }
+      case 'chat': {
+        chat.addMessage({
+          userId: msg.userId,
+          name: msg.name,
+          text: msg.text,
+          timestamp: msg.timestamp,
+        });
         break;
       }
       case 'kicked': {
@@ -151,5 +152,5 @@ export function useWebSocket() {
     }
   }
 
-  return { ws, connected, connect, disconnect, send };
+  return { ws, connected, connect, disconnect, send, sendChat };
 }

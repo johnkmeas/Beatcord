@@ -5,6 +5,7 @@ import { useSequencerStore } from '@/stores/sequencer';
 import { useSynthStore } from '@/stores/synth';
 import { useRoomStore } from '@/stores/room';
 import UserCard from '@/components/users/UserCard.vue';
+import ChatPanel from '@/components/layout/ChatPanel.vue';
 
 const session = useSessionStore();
 const seq = useSequencerStore();
@@ -24,11 +25,11 @@ function noteCount(user: typeof otherUsersList.value[number]): number {
 </script>
 
 <template>
-  <aside class="border-r border-border bg-surface flex flex-col overflow-hidden">
+  <aside class="border-r border-border bg-surface flex flex-col overflow-hidden h-full">
     <div class="px-3.5 py-3 text-[9px] tracking-[0.3em] text-muted uppercase border-b border-border shrink-0">
       Musicians
     </div>
-    <div class="flex-1 overflow-y-auto p-2">
+    <div class="shrink-0 overflow-y-auto p-2 max-h-[40%]">
       <!-- Current user -->
       <UserCard
         :name="session.userName"
@@ -52,5 +53,8 @@ function noteCount(user: typeof otherUsersList.value[number]): number {
         :is-me="false"
       />
     </div>
+
+    <!-- Chat -->
+    <ChatPanel />
   </aside>
 </template>
