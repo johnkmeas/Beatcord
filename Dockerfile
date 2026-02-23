@@ -1,10 +1,13 @@
 FROM node:20-slim AS base
-RUN corepack enable
 
 WORKDIR /app
 
+# Enable corepack for pinned pnpm version from packageManager field
+COPY package.json ./
+RUN corepack enable && corepack prepare
+
 # Install dependencies
-COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
+COPY pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
@@ -16,25 +19,32 @@ COPY packages/shared packages/shared
 COPY packages/server packages/server
 COPY packages/client packages/client
 
-# Build
+# Build all packages in dependency order
 RUN pnpm --filter @beatcord/shared build
 RUN pnpm --filter @beatcord/client build
 RUN pnpm --filter @beatcord/server build
 
-# Production stage
+# ── Production stage ──────────────────────────────────────────
 FROM node:20-slim AS production
-RUN corepack enable
 
 WORKDIR /app
 
-COPY --from=base /app/pnpm-workspace.yaml /app/pnpm-lock.yaml /app/package.json ./
+# Copy package manifests (all workspace packages must be present for pnpm)
+COPY --from=base /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml ./
 COPY --from=base /app/packages/shared/package.json packages/shared/
-COPY --from=base /app/packages/shared/dist packages/shared/dist
 COPY --from=base /app/packages/server/package.json packages/server/
+COPY --from=base /app/packages/client/package.json packages/client/
+
+# Enable corepack with pinned pnpm
+RUN corepack enable && corepack prepare
+
+# Install production dependencies only
+RUN pnpm install --frozen-lockfile --prod
+
+# Copy built artifacts
+COPY --from=base /app/packages/shared/dist packages/shared/dist
 COPY --from=base /app/packages/server/dist packages/server/dist
 COPY --from=base /app/packages/client/dist packages/client/dist
-
-RUN pnpm install --frozen-lockfile --prod
 
 ENV NODE_ENV=production
 EXPOSE 3000
