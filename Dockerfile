@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Enable corepack for pinned pnpm version from packageManager field
 COPY package.json ./
-RUN corepack enable && corepack prepare
+RUN corepack enable && corepack prepare --activate
 
 # Install dependencies
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
@@ -35,8 +35,8 @@ COPY --from=base /app/packages/shared/package.json packages/shared/
 COPY --from=base /app/packages/server/package.json packages/server/
 COPY --from=base /app/packages/client/package.json packages/client/
 
-# Enable corepack with pinned pnpm
-RUN corepack enable && corepack prepare
+# Enable corepack with explicit version and --activate
+RUN corepack enable && corepack prepare pnpm@9.15.5 --activate
 
 # Install production dependencies only
 RUN pnpm install --frozen-lockfile --prod
@@ -48,5 +48,8 @@ COPY --from=base /app/packages/client/dist packages/client/dist
 
 ENV NODE_ENV=production
 EXPOSE 3000
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e 'fetch("http://localhost:"+(process.env.PORT||3000)+"/api/health").then(r=>{if(!r.ok)throw r.status}).catch(()=>process.exit(1))'
 
 CMD ["node", "packages/server/dist/index.js"]

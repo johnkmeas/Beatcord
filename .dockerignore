@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.git/
+.gitignore
+.eslintrc.js
+.agents/
+*.log
+.env
+.env.local
+.DS_Store
+coverage/
+README.md
+LICENSE
+index.html
+server.js
