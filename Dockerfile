@@ -2,11 +2,15 @@ FROM node:20-slim AS base
 
 WORKDIR /app
 
-# Enable corepack for pinned pnpm version from packageManager field
-COPY package.json ./
-RUN corepack enable && corepack prepare --activate
+# Railway injects NODE_ENV=production which causes pnpm to skip devDependencies.
+# Force development mode so vite, vue-tsc, typescript, etc. are installed for the build.
+ENV NODE_ENV=development
 
-# Install dependencies
+# Enable corepack with pinned pnpm version
+COPY package.json ./
+RUN corepack enable && corepack prepare pnpm@9.15.5 --activate
+
+# Install ALL dependencies (including devDependencies needed for build)
 COPY pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/server/package.json packages/server/
