@@ -28,12 +28,13 @@ export function useAudioEngine() {
     noteLength: number,
     synth: SynthState,
     when: number,
+    masterVolume = 1,
   ): void {
     const ctx = audioCtx.value;
     if (!ctx || ctx.state !== 'running') return;
 
     const freq = midiToFreq(midi);
-    const vol = (velocity / 127) * synth.volume * 0.3;
+    const vol = (velocity / 127) * synth.volume * masterVolume * 0.3;
 
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -78,11 +79,12 @@ export function useAudioEngine() {
     when: number,
     bpm: number,
     subdiv: number,
+    masterVolume = 1,
   ): void {
     if (!step.notes.length) return;
     const beatLength = (60 / bpm) / (subdiv / 4);
     for (const n of step.notes) {
-      playNote(n.midi, n.velocity, (n.length || 0.8) * beatLength, synth, when);
+      playNote(n.midi, n.velocity, (n.length || 0.8) * beatLength, synth, when, masterVolume);
     }
   }
 

@@ -16,12 +16,24 @@ export type {
 } from './types/user.js';
 
 export type {
+  GlobalSettings,
+} from './types/global.js';
+
+export type {
+  ArpPattern,
+  ArpRate,
+  ArpSettings,
+  ArpPreset,
+} from './types/arpeggiator.js';
+
+export type {
   JoinMessage,
   SequencerUpdateMessage,
   SynthUpdateMessage,
   StepTickMessage,
   PingMessage,
   ChatMessage,
+  GlobalSettingsUpdateMessage,
   ClientMessage,
   WelcomeMessage,
   UserJoinedMessage,
@@ -32,5 +44,6 @@ export type {
   KickedMessage,
   UsersUpdateMessage,
   ServerChatMessage,
+  ServerGlobalSettingsUpdateMessage,
   ServerMessage,
 } from './types/messages.js';

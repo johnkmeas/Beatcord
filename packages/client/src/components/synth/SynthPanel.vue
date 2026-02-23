@@ -3,11 +3,13 @@ import { ref, shallowRef, markRaw } from 'vue';
 import OscillatorTab from '@/components/synth/OscillatorTab.vue';
 import EnvelopeTab from '@/components/synth/EnvelopeTab.vue';
 import FilterTab from '@/components/synth/FilterTab.vue';
+import ArpeggiatorTab from '@/components/synth/ArpeggiatorTab.vue';
 
 const tabs = [
   { key: 'osc', label: 'Oscillator', component: markRaw(OscillatorTab) },
   { key: 'env', label: 'Envelope', component: markRaw(EnvelopeTab) },
   { key: 'filter', label: 'Filter', component: markRaw(FilterTab) },
+  { key: 'arp', label: 'Arp', component: markRaw(ArpeggiatorTab) },
 ] as const;
 
 const activeTab = ref<string>('osc');
@@ -41,15 +43,15 @@ function selectTab(key: string) {
 </template>
 
 <style scoped>
-.ctrl-group { display: flex; flex-direction: column; gap: 5px; min-width: 110px; }
-.ctrl-label { font-size: 8px; letter-spacing: 0.2em; color: #5555a0; text-transform: uppercase; }
-.ctrl-row { display: flex; align-items: center; gap: 7px; }
-.ctrl-row input[type=range] { flex: 1; min-width: 55px; cursor: pointer; height: 3px; }
-.ctrl-val { font-size: 10px; min-width: 40px; text-align: right; }
-.ctrl-select {
+:deep(.ctrl-group) { display: flex; flex-direction: column; gap: 5px; min-width: 110px; }
+:deep(.ctrl-label) { font-size: 8px; letter-spacing: 0.2em; color: #5555a0; text-transform: uppercase; }
+:deep(.ctrl-row) { display: flex; align-items: center; gap: 7px; }
+:deep(.ctrl-row input[type=range]) { flex: 1; min-width: 55px; cursor: pointer; height: 3px; }
+:deep(.ctrl-val) { font-size: 10px; min-width: 40px; text-align: right; }
+:deep(.ctrl-select) {
   background: #161624; border: 1px solid #333350; color: #ddddf0;
   font-family: 'Space Mono', monospace; font-size: 11px;
   padding: 5px 8px; cursor: pointer; outline: none; width: 100%;
 }
-.divider { width: 1px; background: #252538; align-self: stretch; flex-shrink: 0; }
+:deep(.divider) { width: 1px; background: #252538; align-self: stretch; flex-shrink: 0; }
 </style>

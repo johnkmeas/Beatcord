@@ -1,11 +1,14 @@
 import WebSocket from 'ws';
-import type { ClientMessage } from '@beatcord/shared';
+import type { ClientMessage, GlobalSettings } from '@beatcord/shared';
 import { config } from '../config.js';
 import { users, generateId, getPublicUsers, type ServerUser } from '../state/users.js';
-import { defaultSeqState, defaultSynthState } from '../state/defaults.js';
+import { defaultSeqState, defaultSynthState, defaultGlobalSettings } from '../state/defaults.js';
 import { broadcast, broadcastAll } from './broadcast.js';
 
 const MAX_CHAT_LENGTH = 500;
+
+// ── Global settings (shared by all users in the session) ─────
+let globalSettings: GlobalSettings = defaultGlobalSettings();
 
 // ── Inactivity management ────────────────────────────────────
 
@@ -52,6 +55,7 @@ function handleJoin(ws: WebSocket, name: string): string {
     type: 'welcome',
     userId,
     users: getPublicUsers(),
+    globalSettings,
   }));
 
   // Notify others
@@ -96,6 +100,18 @@ function handleChat(userId: string, text: string): void {
     text: sanitised,
     timestamp: Date.now(),
   });
+}
+
+function handleGlobalSettingsUpdate(userId: string, partial: Partial<GlobalSettings>): void {
+  // Merge partial update into current global settings
+  globalSettings = { ...globalSettings, ...partial };
+  // Broadcast to ALL users (including sender for confirmation)
+  broadcastAll({
+    type: 'global_settings_update',
+    settings: globalSettings,
+    changedBy: userId,
+  });
+  console.log(`Global settings updated by ${userId}:`, Object.keys(partial).join(', '));
 }
 
 // ── Connection handler ───────────────────────────────────────
@@ -143,6 +159,10 @@ export function handleConnection(ws: WebSocket): void {
 
       case 'chat':
         handleChat(userId, msg.text);
+        break;
+
+      case 'global_settings_update':
+        handleGlobalSettingsUpdate(userId, msg.settings);
         break;
     }
   });

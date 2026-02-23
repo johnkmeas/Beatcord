@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
-import { ref, computed } from 'vue';
+import { computed } from 'vue';
+import { useGlobalSettingsStore } from '@/stores/globalSettings';
 
 export const SCALES: Record<string, number[]> = {
   chromatic:       [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
@@ -42,8 +43,10 @@ export const SCALE_NAMES: Record<string, string> = {
 };
 
 export const useScaleStore = defineStore('scale', () => {
-  const root = ref(0); // 0–11, index into NOTE_NAMES
-  const type = ref('chromatic');
+  const globals = useGlobalSettingsStore();
+
+  const root = computed(() => globals.rootNote);
+  const type = computed(() => globals.scaleType);
 
   const scaleNotes = computed(() => {
     const intervals = SCALES[type.value] ?? SCALES.chromatic;
