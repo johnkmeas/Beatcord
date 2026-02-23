@@ -2,6 +2,7 @@
 import { useSequencerStore } from '@/stores/sequencer';
 import { useSynthStore } from '@/stores/synth';
 import { useSessionStore } from '@/stores/session';
+import { useGlobalSettingsStore } from '@/stores/globalSettings';
 import { useSequencer } from '@/composables/useSequencer';
 import type { StepCountOption, SubdivOption } from '@beatcord/shared';
 import ScaleSelector from '@/components/sequencer/ScaleSelector.vue';
@@ -9,24 +10,22 @@ import ScaleSelector from '@/components/sequencer/ScaleSelector.vue';
 const seq = useSequencerStore();
 const synth = useSynthStore();
 const session = useSessionStore();
+const globals = useGlobalSettingsStore();
 const sequencer = useSequencer();
 
 function onBpmChange(e: Event) {
-  seq.bpm = parseInt((e.target as HTMLInputElement).value);
-  if (seq.playing) { sequencer.stop(); sequencer.start(); }
-  sequencer.sendSeqUpdate();
+  globals.updateAndBroadcast({ bpm: parseInt((e.target as HTMLInputElement).value) });
 }
 
 function onStepCountChange(e: Event) {
   const count = parseInt((e.target as HTMLSelectElement).value) as StepCountOption;
   seq.setStepCount(count);
-  if (seq.playing) sequencer.stop();
-  sequencer.sendSeqUpdate();
+  globals.updateAndBroadcast({ stepCount: count });
 }
 
 function onSubdivChange(e: Event) {
   seq.subdiv = parseInt((e.target as HTMLSelectElement).value) as SubdivOption;
-  if (seq.playing) { sequencer.stop(); sequencer.start(); }
+  if (globals.playing) { sequencer.stop(); sequencer.start(); }
   sequencer.sendSeqUpdate();
 }
 
@@ -44,38 +43,38 @@ function onClear() {
       <span>{{ session.userName }}</span>
     </div>
 
-    <!-- Play / Stop -->
+    <!-- Play / Stop (global) -->
     <button
       class="btn"
-      :class="{ active: seq.playing }"
+      :class="{ active: globals.playing }"
       @click="sequencer.toggle()"
     >
-      {{ seq.playing ? '⏹ STOP' : '▶ PLAY' }}
+      {{ globals.playing ? '⏹ STOP' : '▶ PLAY' }}
     </button>
 
     <!-- Clear -->
     <button class="btn danger" @click="onClear">CLEAR</button>
 
-    <!-- BPM -->
+    <!-- BPM (global) -->
     <div class="flex items-center gap-1.5 text-[10px] text-muted">
       BPM
       <input
         type="range"
-        :value="seq.bpm"
+        :value="globals.bpm"
         min="40"
         max="220"
         class="w-[70px] accent-accent cursor-pointer"
         @input="onBpmChange"
       />
-      <span class="font-bold text-text min-w-[34px]">{{ seq.bpm }}</span>
+      <span class="font-bold text-text min-w-[34px]">{{ globals.bpm }}</span>
     </div>
 
-    <!-- Steps -->
+    <!-- Steps (global) -->
     <div class="flex items-center gap-1.5 text-[10px] text-muted">
       STEPS
       <select
         class="ctrl-select"
-        :value="seq.stepCount"
+        :value="globals.stepCount"
         @change="onStepCountChange"
       >
         <option value="8">8</option>

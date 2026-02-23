@@ -1,6 +1,7 @@
 import type { SeqState } from './sequencer.js';
 import type { SynthState } from './synth.js';
 import type { PublicUser } from './user.js';
+import type { GlobalSettings } from './global.js';
 
 // ── Client → Server ─────────────────────────────────────────
 
@@ -34,13 +35,19 @@ export interface ChatMessage {
   text: string;
 }
 
+export interface GlobalSettingsUpdateMessage {
+  type: 'global_settings_update';
+  settings: Partial<GlobalSettings>;
+}
+
 export type ClientMessage =
   | JoinMessage
   | SequencerUpdateMessage
   | SynthUpdateMessage
   | StepTickMessage
   | PingMessage
-  | ChatMessage;
+  | ChatMessage
+  | GlobalSettingsUpdateMessage;
 
 // ── Server → Client ─────────────────────────────────────────
 
@@ -48,6 +55,7 @@ export interface WelcomeMessage {
   type: 'welcome';
   userId: string;
   users: PublicUser[];
+  globalSettings: GlobalSettings;
 }
 
 export interface UserJoinedMessage {
@@ -97,6 +105,12 @@ export interface ServerChatMessage {
   timestamp: number;
 }
 
+export interface ServerGlobalSettingsUpdateMessage {
+  type: 'global_settings_update';
+  settings: GlobalSettings;
+  changedBy: string;
+}
+
 export type ServerMessage =
   | WelcomeMessage
   | UserJoinedMessage
@@ -106,4 +120,5 @@ export type ServerMessage =
   | ServerStepTickMessage
   | KickedMessage
   | UsersUpdateMessage
-  | ServerChatMessage;
+  | ServerChatMessage
+  | ServerGlobalSettingsUpdateMessage;

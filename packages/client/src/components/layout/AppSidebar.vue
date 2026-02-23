@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { useSessionStore } from '@/stores/session';
 import { useSequencerStore } from '@/stores/sequencer';
 import { useSynthStore } from '@/stores/synth';
+import { useGlobalSettingsStore } from '@/stores/globalSettings';
 import { useRoomStore } from '@/stores/room';
 import UserCard from '@/components/users/UserCard.vue';
 import ChatPanel from '@/components/layout/ChatPanel.vue';
@@ -10,6 +11,7 @@ import ChatPanel from '@/components/layout/ChatPanel.vue';
 const session = useSessionStore();
 const seq = useSequencerStore();
 const synth = useSynthStore();
+const globals = useGlobalSettingsStore();
 const room = useRoomStore();
 
 const myNoteCount = computed(() =>
@@ -35,9 +37,9 @@ function noteCount(user: typeof otherUsersList.value[number]): number {
         :name="session.userName"
         :color="synth.color"
         :waveform="synth.waveform"
-        :bpm="seq.bpm"
+        :bpm="globals.bpm"
         :note-count="myNoteCount"
-        :is-playing="seq.playing"
+        :is-playing="globals.playing"
         :is-me="true"
       />
       <!-- Other users -->
@@ -47,9 +49,9 @@ function noteCount(user: typeof otherUsersList.value[number]): number {
         :name="u.name"
         :color="u.synth.color"
         :waveform="u.synth.waveform"
-        :bpm="u.seq?.bpm ?? 120"
+        :bpm="globals.bpm"
         :note-count="noteCount(u)"
-        :is-playing="u.seq?.playing ?? false"
+        :is-playing="globals.playing"
         :is-me="false"
       />
     </div>

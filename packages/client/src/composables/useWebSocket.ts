@@ -2,6 +2,7 @@ import { shallowRef, ref } from 'vue';
 import type { ClientMessage, ServerMessage, PublicUser, SeqState, SynthState } from '@beatcord/shared';
 import { useSessionStore } from '@/stores/session';
 import { useRoomStore } from '@/stores/room';
+import { useGlobalSettingsStore } from '@/stores/globalSettings';
 import { useAudioEngine } from '@/composables/useAudioEngine';
 import { useToast } from '@/composables/useToast';
 import { useChatStore } from '@/stores/chat';
@@ -16,6 +17,7 @@ let pingTimer: ReturnType<typeof setInterval> | null = null;
 export function useWebSocket() {
   const session = useSessionStore();
   const room = useRoomStore();
+  const globals = useGlobalSettingsStore();
   const audio = useAudioEngine();
   const { show } = useToast();
   const chat = useChatStore();
@@ -99,6 +101,9 @@ export function useWebSocket() {
       case 'welcome': {
         session.userId = msg.userId;
         room.setUsers(msg.users, msg.userId);
+        if (msg.globalSettings) {
+          globals.applyFromServer(msg.globalSettings);
+        }
         break;
       }
       case 'user_joined': {
@@ -143,6 +148,10 @@ export function useWebSocket() {
           text: msg.text,
           timestamp: msg.timestamp,
         });
+        break;
+      }
+      case 'global_settings_update': {
+        globals.applyFromServer(msg.settings);
         break;
       }
       case 'kicked': {

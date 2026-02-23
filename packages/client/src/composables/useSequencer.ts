@@ -1,8 +1,10 @@
-import { ref } from 'vue';
 import { useSequencerStore } from '@/stores/sequencer';
 import { useSynthStore } from '@/stores/synth';
+import { useGlobalSettingsStore } from '@/stores/globalSettings';
+import { useArpeggiatorStore } from '@/stores/arpeggiator';
 import { useAudioEngine } from '@/composables/useAudioEngine';
 import { useWebSocket } from '@/composables/useWebSocket';
+import { generateArpNotes } from '@/composables/useArpeggiator';
 import type { SeqState, SynthState } from '@beatcord/shared';
 
 const LOOKAHEAD = 0.1;        // schedule 100ms into the future
@@ -11,6 +13,8 @@ const SCHEDULE_INTERVAL = 25;  // check every 25ms
 export function useSequencer() {
   const seqStore = useSequencerStore();
   const synthStore = useSynthStore();
+  const globals = useGlobalSettingsStore();
+  const arpStore = useArpeggiatorStore();
   const audio = useAudioEngine();
   const { send } = useWebSocket();
 
@@ -41,7 +45,32 @@ export function useSequencer() {
           volume: synthStore.volume,
           color: synthStore.color,
         };
-        audio.playStep(step, synthSnap, nextStepTime, seqStore.bpm, seqStore.subdiv);
+
+        if (arpStore.enabled && step.notes.length > 0) {
+          // Arpeggiate: schedule individual sub-notes
+          const arpEvents = generateArpNotes(
+            step.notes,
+            arpStore.pattern,
+            arpStore.rate,
+            arpStore.octaveRange,
+            arpStore.gate,
+            arpStore.swing,
+            globals.bpm,
+            seqStore.subdiv,
+          );
+          for (const ev of arpEvents) {
+            audio.playNote(
+              ev.midi,
+              ev.velocity,
+              ev.duration,
+              synthSnap,
+              nextStepTime + ev.offset,
+              globals.masterVolume,
+            );
+          }
+        } else {
+          audio.playStep(step, synthSnap, nextStepTime, globals.bpm, seqStore.subdiv, globals.masterVolume);
+        }
 
         // Broadcast step_tick slightly ahead of actual play time
         const delay = Math.max(0, (nextStepTime - ctx.currentTime) * 1000);
@@ -57,9 +86,9 @@ export function useSequencer() {
       }
 
       // Advance
-      const stepDuration = (60 / seqStore.bpm) / (seqStore.subdiv / 4);
+      const stepDuration = (60 / globals.bpm) / (seqStore.subdiv / 4);
       nextStepTime += stepDuration;
-      scheduledStep = (scheduledStep + 1) % seqStore.stepCount;
+      scheduledStep = (scheduledStep + 1) % globals.stepCount;
     }
 
     schedulerTimer = setTimeout(scheduler, SCHEDULE_INTERVAL);
@@ -69,7 +98,7 @@ export function useSequencer() {
 
   function start() {
     const ctx = audio.init();
-    seqStore.playing = true;
+    globals.updateAndBroadcast({ playing: true });
     scheduledStep = 0;
     seqStore.currentStep = -1;
     nextStepTime = ctx.currentTime;
@@ -79,13 +108,13 @@ export function useSequencer() {
 
   function stop() {
     if (schedulerTimer) { clearTimeout(schedulerTimer); schedulerTimer = null; }
-    seqStore.playing = false;
+    globals.updateAndBroadcast({ playing: false });
     seqStore.currentStep = -1;
     sendSeqUpdate();
   }
 
   function toggle() {
-    if (seqStore.playing) stop();
+    if (globals.playing) stop();
     else start();
   }
 
@@ -94,10 +123,10 @@ export function useSequencer() {
   function getSeqState(): SeqState {
     return {
       steps: seqStore.steps,
-      stepCount: seqStore.stepCount,
-      bpm: seqStore.bpm,
+      stepCount: globals.stepCount,
+      bpm: globals.bpm,
       subdiv: seqStore.subdiv,
-      playing: seqStore.playing,
+      playing: globals.playing,
     };
   }
 

@@ -1,4 +1,4 @@
-import type { SeqState, StepData, SynthState } from '@beatcord/shared';
+import type { SeqState, StepData, SynthState, GlobalSettings } from '@beatcord/shared';
 
 const USER_COLORS = [
   '#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff',
@@ -34,5 +34,16 @@ export function defaultSynthState(): SynthState {
     filterQ: 1.5,
     volume: 0.7,
     color: randomColor(),
+  };
+}
+
+export function defaultGlobalSettings(): GlobalSettings {
+  return {
+    playing: false,
+    bpm: 120,
+    stepCount: 16,
+    rootNote: 0,
+    scaleType: 'chromatic',
+    masterVolume: 0.8,
   };
 }
