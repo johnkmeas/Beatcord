@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { Waveform } from '@beatcord/shared';
+import type { Waveform, SynthState } from '@beatcord/shared';
 
 export const useSynthStore = defineStore('synth', () => {
   const waveform = ref<Waveform>('sawtooth');
@@ -13,6 +13,20 @@ export const useSynthStore = defineStore('synth', () => {
   const volume = ref(0.7);
   const color = ref('#ff6b6b');
 
+  function getSynthState(): SynthState {
+    return {
+      waveform: waveform.value,
+      attack: attack.value,
+      decay: decay.value,
+      sustain: sustain.value,
+      release: release.value,
+      filterFreq: filterFreq.value,
+      filterQ: filterQ.value,
+      volume: volume.value,
+      color: color.value,
+    };
+  }
+
   return {
     waveform,
     attack,
@@ -23,5 +37,6 @@ export const useSynthStore = defineStore('synth', () => {
     filterQ,
     volume,
     color,
+    getSynthState,
   };
 });
