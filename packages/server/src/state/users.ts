@@ -7,6 +7,7 @@ export interface ServerUser {
   seq: SeqState;
   synth: SynthState;
   ws: WebSocket;
+  roomId: string;
   lastActivity: number;
   inactivityTimer: ReturnType<typeof setTimeout> | null;
 }
@@ -20,8 +21,12 @@ export function generateId(): string {
 }
 
 /** Get public-facing user data for all connected users. */
-export function getPublicUsers(): PublicUser[] {
-  return Array.from(users.values()).map((u) => ({
+export function getPublicUsers(roomId?: string): PublicUser[] {
+  const source = roomId
+    ? Array.from(users.values()).filter((u) => u.roomId === roomId)
+    : Array.from(users.values());
+
+  return source.map((u) => ({
     id: u.id,
     name: u.name,
     seq: u.seq,

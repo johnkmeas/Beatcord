@@ -12,7 +12,7 @@
     "start": "node packages/server/dist/index.js",
     "lint": "eslint packages --ext .ts,.vue",
     "test": "vitest run",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm --filter @beatcord/shared build && pnpm -r typecheck"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^7.0.0",

@@ -2,15 +2,11 @@ import WebSocket from 'ws';
 import type { ClientMessage, GlobalSettings } from '@beatcord/shared';
 import { config } from '../config.js';
 import { users, generateId, getPublicUsers, type ServerUser } from '../state/users.js';
-import { defaultSeqState, defaultSynthState, defaultGlobalSettings } from '../state/defaults.js';
-import { broadcast, broadcastAll } from './broadcast.js';
+import { defaultSeqState, defaultSynthState } from '../state/defaults.js';
+import { broadcastToRoom, broadcastAllToRoom } from './broadcast.js';
+import { getOrCreateRoom, removeUserFromRoom, sanitiseRoomId } from './rooms.js';
 
 const MAX_CHAT_LENGTH = 500;
-
-// ── Global settings (shared by all users in the session) ─────
-let globalSettings: GlobalSettings = defaultGlobalSettings();
-
-// ── Inactivity management ────────────────────────────────────
 
 function resetInactivityTimer(user: ServerUser): void {
   if (user.inactivityTimer) clearTimeout(user.inactivityTimer);
@@ -27,39 +23,45 @@ function resetInactivityTimer(user: ServerUser): void {
 function removeUser(id: string): void {
   const user = users.get(id);
   if (!user) return;
+
   if (user.inactivityTimer) clearTimeout(user.inactivityTimer);
   users.delete(id);
-  broadcastAll({ type: 'user_left', userId: id });
-  broadcastAll({ type: 'users_update', users: getPublicUsers() });
-  console.log(`User ${user.name} (${id}) removed`);
+  removeUserFromRoom(user.roomId, id);
+
+  broadcastAllToRoom(user.roomId, { type: 'user_left', userId: id });
+  broadcastAllToRoom(user.roomId, { type: 'users_update', users: getPublicUsers(user.roomId) });
+  console.log(`User ${user.name} (${id}) removed from room ${user.roomId}`);
 }
 
-// ── Message handlers ─────────────────────────────────────────
-
-function handleJoin(ws: WebSocket, name: string): string {
+function handleJoin(ws: WebSocket, name: string, requestedRoomId: string): string {
+  const room = getOrCreateRoom(requestedRoomId);
   const userId = generateId();
+
   const user: ServerUser = {
     id: userId,
     name: name.slice(0, config.maxNameLength),
     seq: defaultSeqState(),
     synth: defaultSynthState(),
     ws,
+    roomId: room.id,
     lastActivity: Date.now(),
     inactivityTimer: null,
   };
+
   users.set(userId, user);
+  room.userIds.add(userId);
   resetInactivityTimer(user);
 
-  // Send welcome with full state
   ws.send(JSON.stringify({
     type: 'welcome',
     userId,
-    users: getPublicUsers(),
-    globalSettings,
+    roomId: room.id,
+    users: getPublicUsers(room.id),
+    globalSettings: room.globalSettings,
   }));
 
-  // Notify others
-  broadcast(
+  broadcastToRoom(
+    room.id,
     {
       type: 'user_joined',
       user: { id: userId, name: user.name, seq: user.seq, synth: user.synth },
@@ -67,33 +69,36 @@ function handleJoin(ws: WebSocket, name: string): string {
     userId,
   );
 
-  console.log(`User ${user.name} (${userId}) joined`);
+  console.log(`User ${user.name} (${userId}) joined room ${room.id}`);
   return userId;
 }
 
 function handleSequencerUpdate(userId: string): void {
   const user = users.get(userId);
   if (!user) return;
-  broadcast({ type: 'sequencer_update', userId, seq: user.seq }, userId);
+  broadcastToRoom(user.roomId, { type: 'sequencer_update', userId, seq: user.seq }, userId);
 }
 
 function handleSynthUpdate(userId: string): void {
   const user = users.get(userId);
   if (!user) return;
-  broadcast({ type: 'synth_update', userId, synth: user.synth }, userId);
+  broadcastToRoom(user.roomId, { type: 'synth_update', userId, synth: user.synth }, userId);
 }
 
 function handleStepTick(userId: string, step: number, hasNotes: boolean): void {
-  broadcast({ type: 'step_tick', userId, step, hasNotes }, userId);
+  const user = users.get(userId);
+  if (!user) return;
+  broadcastToRoom(user.roomId, { type: 'step_tick', userId, step, hasNotes }, userId);
 }
 
 function handleChat(userId: string, text: string): void {
   const user = users.get(userId);
   if (!user) return;
+
   const sanitised = text.trim().slice(0, MAX_CHAT_LENGTH);
   if (!sanitised) return;
-  // Broadcast to ALL users (including sender) so they see confirmation
-  broadcastAll({
+
+  broadcastAllToRoom(user.roomId, {
     type: 'chat',
     userId,
     name: user.name,
@@ -103,18 +108,19 @@ function handleChat(userId: string, text: string): void {
 }
 
 function handleGlobalSettingsUpdate(userId: string, partial: Partial<GlobalSettings>): void {
-  // Merge partial update into current global settings
-  globalSettings = { ...globalSettings, ...partial };
-  // Broadcast to ALL users (including sender for confirmation)
-  broadcastAll({
+  const user = users.get(userId);
+  if (!user) return;
+
+  const room = getOrCreateRoom(user.roomId);
+  room.globalSettings = { ...room.globalSettings, ...partial };
+
+  broadcastAllToRoom(room.id, {
     type: 'global_settings_update',
-    settings: globalSettings,
+    settings: room.globalSettings,
     changedBy: userId,
   });
-  console.log(`Global settings updated by ${userId}:`, Object.keys(partial).join(', '));
+  console.log(`Global settings updated by ${userId} in room ${room.id}:`, Object.keys(partial).join(', '));
 }
-
-// ── Connection handler ───────────────────────────────────────
 
 export function handleConnection(ws: WebSocket): void {
   let userId: string | null = null;
@@ -128,7 +134,7 @@ export function handleConnection(ws: WebSocket): void {
     }
 
     if (msg.type === 'join') {
-      userId = handleJoin(ws, msg.name);
+      userId = handleJoin(ws, msg.name, sanitiseRoomId(msg.roomId));
       return;
     }
 
@@ -154,7 +160,6 @@ export function handleConnection(ws: WebSocket): void {
         break;
 
       case 'ping':
-        // Keep-alive / activity update — handled by resetInactivityTimer above
         break;
 
       case 'chat':

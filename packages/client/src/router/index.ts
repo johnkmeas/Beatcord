@@ -9,9 +9,10 @@ export const router = createRouter({
       component: () => import('../views/LobbyView.vue'),
     },
     {
-      path: '/jam',
+      path: '/jam/:roomId',
       name: 'jam',
       component: () => import('../views/JamView.vue'),
+      props: true,
     },
   ],
 });
