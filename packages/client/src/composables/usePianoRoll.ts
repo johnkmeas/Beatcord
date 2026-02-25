@@ -1,6 +1,7 @@
 import type { Ref } from 'vue';
 import type { StepData } from '@beatcord/shared';
 import { useSequencerStore } from '@/stores/sequencer';
+import { useGlobalSettingsStore } from '@/stores/globalSettings';
 import { useScaleStore } from '@/stores/scale';
 import { useSynthStore } from '@/stores/synth';
 
@@ -51,6 +52,7 @@ export function usePianoRoll(
   scrollY: Ref<number>,
 ) {
   const seqStore = useSequencerStore();
+  const globals = useGlobalSettingsStore();
   const scaleStore = useScaleStore();
   const synthStore = useSynthStore();
 
@@ -212,7 +214,7 @@ export function usePianoRoll(
     sx: number,
     sy: number,
   ): void {
-    if (!seqStore.playing || seqStore.currentStep < 0) return;
+    if (!globals.playing || seqStore.currentStep < 0) return;
     const x = stepToX(seqStore.currentStep) - sx;
     if (x < KEY_W || x > ctx.canvas.width) return;
 
@@ -314,7 +316,7 @@ export function usePianoRoll(
       if (x + STEP_W < KEY_W || x > w) continue;
 
       // Current step highlight
-      if (seqStore.playing && seqStore.currentStep === s) {
+      if (globals.playing && seqStore.currentStep === s) {
         ctx.fillStyle = 'rgba(107,203,119,0.2)';
         ctx.fillRect(x, 0, STEP_W, HEADER_H);
       }
@@ -327,7 +329,7 @@ export function usePianoRoll(
       ctx.stroke();
 
       // Step number
-      const textColor = (seqStore.playing && seqStore.currentStep === s)
+      const textColor = (globals.playing && seqStore.currentStep === s)
         ? COL.green
         : (s % 4 === 0 ? COL.text : COL.muted);
       ctx.fillStyle = textColor;

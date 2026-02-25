@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useSequencerStore } from '@/stores/sequencer';
+import { useGlobalSettingsStore } from '@/stores/globalSettings';
 import { useScaleStore } from '@/stores/scale';
 import { useSynthStore } from '@/stores/synth';
 import { useAudioEngine } from '@/composables/useAudioEngine';
@@ -12,6 +13,7 @@ const emit = defineEmits<{
 }>();
 
 const seqStore = useSequencerStore();
+const globals = useGlobalSettingsStore();
 const scaleStore = useScaleStore();
 const synthStore = useSynthStore();
 const audio = useAudioEngine();
@@ -30,7 +32,7 @@ let rafId = 0;
 
 function renderLoop() {
   pianoRoll.draw();
-  if (seqStore.playing) {
+  if (globals.playing) {
     rafId = requestAnimationFrame(renderLoop);
   }
 }
@@ -40,7 +42,7 @@ function requestDraw() {
 }
 
 // Start/stop RAF loop when playing state changes
-watch(() => seqStore.playing, (playing) => {
+watch(() => globals.playing, (playing) => {
   if (playing) {
     rafId = requestAnimationFrame(renderLoop);
   } else {
@@ -115,10 +117,10 @@ function onWheel(e: WheelEvent) {
   const maxY = Math.max(0, pianoRoll.gridHeight() - (wrapperRef.value?.clientHeight ?? 0));
   scrollX.value = Math.max(0, Math.min(maxX, scrollX.value + e.deltaX));
   scrollY.value = Math.max(0, Math.min(maxY, scrollY.value + e.deltaY));
-  if (!seqStore.playing) requestDraw();
+  if (!globals.playing) requestDraw();
 }
 
-// ── Pointer events ─────────────────────────────────────────
+// ── Pointer events
 
 function onPointerDown(e: PointerEvent) {
   if (e.button === 2) return; // handled by context menu
@@ -148,7 +150,7 @@ function onPointerDown(e: PointerEvent) {
   }
 
   sequencer.sendSeqUpdate();
-  if (!seqStore.playing) requestDraw();
+  if (!globals.playing) requestDraw();
 }
 
 function onContextMenu(e: MouseEvent) {
@@ -173,7 +175,7 @@ function onContextMenu(e: MouseEvent) {
   if (hit) {
     seqStore.removeNote(hit.step, hit.midi);
     sequencer.sendSeqUpdate();
-    if (!seqStore.playing) requestDraw();
+    if (!globals.playing) requestDraw();
   }
 }
 </script>
