@@ -4,6 +4,7 @@ import { useSessionStore } from '@/stores/session';
 import { useRoomStore } from '@/stores/room';
 import { useGlobalSettingsStore } from '@/stores/globalSettings';
 import { useAudioEngine } from '@/composables/useAudioEngine';
+import { startScheduler, stopScheduler, isSchedulerRunning } from '@/composables/schedulerEngine';
 import { useToast } from '@/composables/useToast';
 import { useChatStore } from '@/stores/chat';
 
@@ -151,7 +152,18 @@ export function useWebSocket() {
         break;
       }
       case 'global_settings_update': {
+        const wasPlaying = globals.playing;
         globals.applyFromServer(msg.settings);
+
+        // React to remote play/stop changes
+        if (msg.settings.playing !== undefined && msg.settings.playing !== wasPlaying) {
+          if (msg.settings.playing && !isSchedulerRunning()) {
+            audio.init();
+            startScheduler();
+          } else if (!msg.settings.playing && isSchedulerRunning()) {
+            stopScheduler();
+          }
+        }
         break;
       }
       case 'kicked': {
