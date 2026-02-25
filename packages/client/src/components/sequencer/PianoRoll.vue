@@ -6,7 +6,8 @@ import { useScaleStore } from '@/stores/scale';
 import { useSynthStore } from '@/stores/synth';
 import { useAudioEngine } from '@/composables/useAudioEngine';
 import { useSequencer } from '@/composables/useSequencer';
-import { usePianoRoll, MIDI_MAX, ROW_H, KEY_W, HEADER_H } from '@/composables/usePianoRoll';
+import { usePianoRoll, MIDI_MAX, ROW_H, KEY_W, HEADER_H, STEP_W } from '@/composables/usePianoRoll';
+import type { NoteEdgeHit } from '@/composables/usePianoRoll';
 
 const emit = defineEmits<{
   (e: 'open-editor', stepIndex: number, rect: DOMRect): void;
@@ -25,6 +26,12 @@ const scrollX = ref(0);
 const scrollY = ref(0);
 
 const pianoRoll = usePianoRoll(canvasRef, scrollX, scrollY);
+
+// ── Resize drag state ──────────────────────────────────────
+const isResizing = ref(false);
+const resizeEdge = ref<NoteEdgeHit | null>(null);
+const resizeStartX = ref(0);
+const resizeOrigLength = ref(1);
 
 // ── Rendering ──────────────────────────────────────────────
 
@@ -128,9 +135,21 @@ function onPointerDown(e: PointerEvent) {
   const cvs = canvasRef.value;
   if (!cvs) return;
   const rect = cvs.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
   const cx = (e.clientX - rect.left);
   const cy = (e.clientY - rect.top);
+
+  // Check for note edge resize
+  const edgeHit = pianoRoll.hitTestNoteEdge(cx, cy);
+  if (edgeHit) {
+    isResizing.value = true;
+    resizeEdge.value = edgeHit;
+    resizeStartX.value = e.clientX;
+    const step = seqStore.steps[edgeHit.step];
+    const note = step?.notes.find((n) => n.midi === edgeHit.midi);
+    resizeOrigLength.value = note?.length ?? 1;
+    cvs.setPointerCapture(e.pointerId);
+    return;
+  }
 
   // Check header click
   const headerStep = pianoRoll.hitTestHeader(cx, cy);
@@ -151,6 +170,46 @@ function onPointerDown(e: PointerEvent) {
 
   sequencer.sendSeqUpdate();
   if (!globals.playing) requestDraw();
+}
+
+function onPointerMove(e: PointerEvent) {
+  const cvs = canvasRef.value;
+  if (!cvs) return;
+
+  if (isResizing.value && resizeEdge.value) {
+    const deltaX = e.clientX - resizeStartX.value;
+    const deltaSteps = Math.round(deltaX / STEP_W);
+    let newLength: number;
+
+    if (resizeEdge.value.edge === 'right') {
+      newLength = resizeOrigLength.value + deltaSteps;
+    } else {
+      newLength = resizeOrigLength.value - deltaSteps;
+    }
+
+    newLength = Math.max(1, Math.min(newLength, seqStore.stepCount - resizeEdge.value.step));
+    seqStore.setSingleNoteLength(resizeEdge.value.step, resizeEdge.value.midi, newLength);
+    if (!globals.playing) requestDraw();
+    return;
+  }
+
+  // Cursor hint: show ew-resize when hovering a note edge
+  const rect = cvs.getBoundingClientRect();
+  const cx = e.clientX - rect.left;
+  const cy = e.clientY - rect.top;
+  const edge = pianoRoll.hitTestNoteEdge(cx, cy);
+  cvs.style.cursor = edge ? 'ew-resize' : 'crosshair';
+}
+
+function onPointerUp(e: PointerEvent) {
+  if (isResizing.value) {
+    isResizing.value = false;
+    resizeEdge.value = null;
+    sequencer.sendSeqUpdate();
+    if (!globals.playing) requestDraw();
+    const cvs = canvasRef.value;
+    if (cvs) cvs.releasePointerCapture(e.pointerId);
+  }
 }
 
 function onContextMenu(e: MouseEvent) {
@@ -190,6 +249,8 @@ function onContextMenu(e: MouseEvent) {
       ref="canvasRef"
       class="absolute inset-0 cursor-crosshair"
       @pointerdown="onPointerDown"
+      @pointermove="onPointerMove"
+      @pointerup="onPointerUp"
       @contextmenu="onContextMenu"
     />
   </div>

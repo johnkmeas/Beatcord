@@ -5,6 +5,7 @@ import { useScaleStore } from '@/stores/scale';
 import { useAudioEngine } from '@/composables/useAudioEngine';
 import { useSynthStore } from '@/stores/synth';
 import { useSequencer } from '@/composables/useSequencer';
+import { useGlobalSettingsStore } from '@/stores/globalSettings';
 
 const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const BLACK_NOTES = new Set(['C#', 'D#', 'F#', 'G#', 'A#']);
@@ -25,6 +26,7 @@ const scaleStore = useScaleStore();
 const synthStore = useSynthStore();
 const audio = useAudioEngine();
 const sequencer = useSequencer();
+const globals = useGlobalSettingsStore();
 
 const editorRef = ref<HTMLDivElement | null>(null);
 const octave = ref(4);
@@ -33,13 +35,13 @@ const step = computed(() => seqStore.steps[props.stepIndex]);
 const activeMidis = computed(() => new Set(step.value?.notes.map((n) => n.midi) ?? []));
 
 const velocity = ref(100);
-const noteLength = ref(0.8);
+const noteLength = ref(1);
 
 // Sync velocity/length from first note
 watch(() => props.stepIndex, () => {
   const first = step.value?.notes[0];
   velocity.value = first?.velocity ?? 100;
-  noteLength.value = first?.length ?? 0.8;
+  noteLength.value = first?.length ?? 1;
 }, { immediate: true });
 
 // Position
@@ -92,7 +94,7 @@ function onVelocityInput(e: Event) {
 }
 
 function onLengthInput(e: Event) {
-  const v = parseFloat((e.target as HTMLInputElement).value);
+  const v = parseInt((e.target as HTMLInputElement).value, 10);
   noteLength.value = v;
   seqStore.setNoteLength(props.stepIndex, v);
   sequencer.sendSeqUpdate();
@@ -178,20 +180,20 @@ onUnmounted(() => document.removeEventListener('click', onDocClick));
         </div>
       </div>
 
-      <!-- Note length -->
+      <!-- Note length (steps) -->
       <div>
-        <div class="text-[8px] tracking-[0.2em] text-muted uppercase mb-1">Note Length</div>
+        <div class="text-[8px] tracking-[0.2em] text-muted uppercase mb-1">Note Length (steps)</div>
         <div class="flex items-center gap-2 text-[10px] text-muted">
           <input
             type="range"
             :value="noteLength"
-            min="0.05"
-            max="1"
-            step="0.05"
+            min="1"
+            :max="globals.stepCount"
+            step="1"
             class="flex-1 accent-accent"
             @input="onLengthInput"
           />
-          <span class="min-w-[38px] text-right text-text">{{ noteLength.toFixed(2) }}</span>
+          <span class="min-w-[38px] text-right text-text">{{ noteLength }}</span>
         </div>
       </div>
     </div>

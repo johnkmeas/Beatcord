@@ -46,6 +46,13 @@ export interface PianoRollHit {
   midi: number;
 }
 
+/** Result of hitting a note edge for resize. */
+export interface NoteEdgeHit {
+  step: number;
+  midi: number;
+  edge: 'left' | 'right';
+}
+
 export function usePianoRoll(
   canvas: Ref<HTMLCanvasElement | null>,
   scrollX: Ref<number>,
@@ -182,7 +189,7 @@ export function usePianoRoll(
       for (const n of step.notes) {
         const x = stepToX(si) - sx + 1;
         const y = midiToY(n.midi) - sy + 1;
-        const nw = Math.max(4, STEP_W * (n.length || 0.8) - 2);
+        const nw = Math.max(4, STEP_W * (n.length || 1) - 2);
         const nh = ROW_H - 2;
 
         if (x + nw < KEY_W || x > w || y + nh < HEADER_H || y > h) continue;
@@ -361,10 +368,43 @@ export function usePianoRoll(
     ctx.fillRect(0, 0, KEY_W, HEADER_H);
   }
 
+  /** Test if pointer is within 5px of a note's left or right edge. */
+  function hitTestNoteEdge(canvasX: number, canvasY: number): NoteEdgeHit | null {
+    const EDGE_PX = 5;
+    const gx = canvasX + scrollX.value - KEY_W;
+    const gy = canvasY + scrollY.value - HEADER_H;
+    if (gx < 0 || gy < 0) return null;
+
+    const midi = MIDI_MAX - Math.floor(gy / ROW_H);
+    if (midi < MIDI_MIN || midi > MIDI_MAX) return null;
+
+    // Check each step for notes at this midi row
+    for (let si = 0; si < seqStore.stepCount; si++) {
+      const step = seqStore.steps[si];
+      if (!step) continue;
+      const note = step.notes.find((n) => n.midi === midi);
+      if (!note) continue;
+
+      const noteX = si * STEP_W; // grid-relative X
+      const noteW = Math.max(4, STEP_W * (note.length || 1) - 2);
+
+      // Left edge
+      if (Math.abs(gx - noteX) <= EDGE_PX) {
+        return { step: si, midi, edge: 'left' };
+      }
+      // Right edge
+      if (Math.abs(gx - (noteX + noteW)) <= EDGE_PX) {
+        return { step: si, midi, edge: 'right' };
+      }
+    }
+    return null;
+  }
+
   return {
     draw,
     hitTest,
     hitTestHeader,
+    hitTestNoteEdge,
     gridWidth,
     gridHeight,
     midiToY,
