@@ -4,7 +4,7 @@ export interface NoteData {
   midi: number;
   /** Velocity 1–127 */
   velocity: number;
-  /** Note length as fraction of beat (0.05–1.0) */
+  /** Note length in steps (≥1, supports multi-step notes) */
   length: number;
 }
 

@@ -84,7 +84,7 @@ export function useAudioEngine() {
     if (!step.notes.length) return;
     const beatLength = (60 / bpm) / (subdiv / 4);
     for (const n of step.notes) {
-      playNote(n.midi, n.velocity, (n.length || 0.8) * beatLength, synth, when, masterVolume);
+      playNote(n.midi, n.velocity, (n.length || 1) * beatLength, synth, when, masterVolume);
     }
   }
 

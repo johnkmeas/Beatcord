@@ -28,7 +28,7 @@ export const useSequencerStore = defineStore('sequencer', () => {
     }
   }
 
-  function toggleNote(stepIndex: number, midi: number, velocity = 100, length = 0.8) {
+  function toggleNote(stepIndex: number, midi: number, velocity = 100, length = 1) {
     const step = steps.value[stepIndex];
     if (!step) return;
     const idx = step.notes.findIndex((n) => n.midi === midi);
@@ -39,7 +39,7 @@ export const useSequencerStore = defineStore('sequencer', () => {
     }
   }
 
-  function addNote(stepIndex: number, midi: number, velocity = 100, length = 0.8) {
+  function addNote(stepIndex: number, midi: number, velocity = 100, length = 1) {
     const step = steps.value[stepIndex];
     if (!step) return;
     if (step.notes.some((n) => n.midi === midi)) return;
@@ -63,6 +63,29 @@ export const useSequencerStore = defineStore('sequencer', () => {
     const step = steps.value[stepIndex];
     if (!step) return;
     step.notes.forEach((n) => { n.length = length; });
+  }
+
+  /** Set the length of a single note (identified by step + midi). */
+  function setSingleNoteLength(stepIndex: number, midi: number, length: number) {
+    const step = steps.value[stepIndex];
+    if (!step) return;
+    const note = step.notes.find((n) => n.midi === midi);
+    if (note) note.length = Math.max(1, length);
+  }
+
+  /** Move a note from one step to another. */
+  function moveNote(fromStep: number, midi: number, toStep: number) {
+    if (fromStep === toStep) return;
+    const src = steps.value[fromStep];
+    const dst = steps.value[toStep];
+    if (!src || !dst) return;
+    const idx = src.notes.findIndex((n) => n.midi === midi);
+    if (idx < 0) return;
+    const [note] = src.notes.splice(idx, 1);
+    // Replace if note already exists at destination
+    const dstIdx = dst.notes.findIndex((n) => n.midi === midi);
+    if (dstIdx >= 0) dst.notes[dstIdx] = note;
+    else dst.notes.push(note);
   }
 
   function getSeqState(): SeqState {
@@ -89,6 +112,8 @@ export const useSequencerStore = defineStore('sequencer', () => {
     removeNote,
     setNoteVelocity,
     setNoteLength,
+    setSingleNoteLength,
+    moveNote,
     getSeqState,
   };
 });
