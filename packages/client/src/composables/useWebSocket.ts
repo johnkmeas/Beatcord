@@ -15,6 +15,9 @@ const reconnectAttempts = ref(0);
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let pingTimer: ReturnType<typeof setInterval> | null = null;
 
+/** Stable per-tab identifier — survives reconnects so the server can evict ghost sessions. */
+const clientId = crypto.randomUUID();
+
 export function useWebSocket() {
   const session = useSessionStore();
   const room = useRoomStore();
@@ -28,9 +31,18 @@ export function useWebSocket() {
     return `${proto}//${window.location.host}/ws`;
   }
 
-  function connect(name: string) {
+  function connect(name: string, roomId: string) {
     if (ws.value && (ws.value.readyState === WebSocket.OPEN || ws.value.readyState === WebSocket.CONNECTING)) {
       return;
+    }
+
+    // Detach handlers from the previous (now dead) socket so its late
+    // onclose can't trigger a second reconnect cycle.
+    if (ws.value) {
+      ws.value.onopen = null;
+      ws.value.onclose = null;
+      ws.value.onerror = null;
+      ws.value.onmessage = null;
     }
 
     const url = wsUrl();
@@ -39,7 +51,7 @@ export function useWebSocket() {
     ws.value.onopen = () => {
       connected.value = true;
       reconnectAttempts.value = 0;
-      send({ type: 'join', name });
+      send({ type: 'join', name, roomId, clientId });
       if (pingTimer) clearInterval(pingTimer);
       pingTimer = setInterval(() => send({ type: 'ping' }), 30_000);
       session.isConnected = true;
@@ -48,7 +60,7 @@ export function useWebSocket() {
     ws.value.onclose = () => {
       connected.value = false;
       session.isConnected = false;
-      scheduleReconnect(name);
+      scheduleReconnect(name, roomId);
       if (pingTimer) { clearInterval(pingTimer); pingTimer = null; }
       show('Connection lost — reconnecting…', '#ffd93d');
     };
@@ -68,13 +80,13 @@ export function useWebSocket() {
     };
   }
 
-  function scheduleReconnect(name: string) {
+  function scheduleReconnect(name: string, roomId: string) {
     if (reconnectTimer) return;
     const delay = Math.min(1000 * 2 ** reconnectAttempts.value, 30_000);
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
       reconnectAttempts.value++;
-      connect(name);
+      connect(name, roomId);
     }, delay);
   }
 
@@ -101,6 +113,8 @@ export function useWebSocket() {
     switch (msg.type) {
       case 'welcome': {
         session.userId = msg.userId;
+        session.setRoom(msg.roomId);
+        room.reset();
         room.setUsers(msg.users, msg.userId);
         if (msg.globalSettings) {
           globals.applyFromServer(msg.globalSettings);

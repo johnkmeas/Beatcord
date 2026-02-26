@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute } from 'vue-router';
 import { useSessionStore } from '@/stores/session';
 import { useRoomStore } from '@/stores/room';
 import { useSequencer } from '@/composables/useSequencer';
@@ -17,13 +17,13 @@ import SynthPanel from '@/components/synth/SynthPanel.vue';
 import OtherTrack from '@/components/users/OtherTrack.vue';
 
 const router = useRouter();
+const route = useRoute();
 const session = useSessionStore();
 const room = useRoomStore();
 const sequencer = useSequencer();
 const ws = useWebSocket();
 const audio = useAudioEngine();
 
-// Note editor state
 const editorStep = ref<number | null>(null);
 const editorRect = ref(new DOMRect());
 
@@ -43,8 +43,12 @@ onMounted(() => {
     router.replace({ name: 'lobby' });
     return;
   }
+
+  const routeRoomId = typeof route.params.roomId === 'string' ? route.params.roomId : 'global';
+  session.setRoom(routeRoomId);
+
   audio.init();
-  ws.connect(session.userName);
+  ws.connect(session.userName, session.roomId);
 });
 
 onUnmounted(() => {
@@ -58,18 +62,15 @@ onUnmounted(() => {
     <AppHeader />
 
     <div class="flex flex-1 overflow-hidden">
-      <!-- Sidebar — hidden on mobile -->
       <div class="w-[210px] shrink-0 hidden sm:block">
         <AppSidebar />
       </div>
 
-      <!-- Main panel -->
       <div class="flex flex-col flex-1 overflow-hidden bg-bg">
         <TransportBar />
         <PianoRoll @open-editor="openEditor" />
         <SynthPanel />
 
-        <!-- Other users -->
         <div class="shrink-0 max-h-[120px] overflow-y-auto border-t border-border bg-bg">
           <template v-if="otherUsersList.length">
             <OtherTrack
@@ -80,13 +81,12 @@ onUnmounted(() => {
             />
           </template>
           <div v-else class="px-3.5 py-2.5 text-[10px] text-muted tracking-wider">
-            No other musicians yet — share the link!
+            No other musicians yet — share the room URL!
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Note editor popup -->
     <NoteEditor
       v-if="editorStep !== null"
       :step-index="editorStep"
