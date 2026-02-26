@@ -9,6 +9,7 @@ export interface JoinMessage {
   type: 'join';
   name: string;
   roomId: string;
+  clientId: string;
 }
 
 export interface SequencerUpdateMessage {

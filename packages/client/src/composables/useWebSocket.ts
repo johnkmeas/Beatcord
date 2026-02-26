@@ -15,6 +15,9 @@ const reconnectAttempts = ref(0);
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let pingTimer: ReturnType<typeof setInterval> | null = null;
 
+/** Stable per-tab identifier — survives reconnects so the server can evict ghost sessions. */
+const clientId = crypto.randomUUID();
+
 export function useWebSocket() {
   const session = useSessionStore();
   const room = useRoomStore();
@@ -33,13 +36,22 @@ export function useWebSocket() {
       return;
     }
 
+    // Detach handlers from the previous (now dead) socket so its late
+    // onclose can't trigger a second reconnect cycle.
+    if (ws.value) {
+      ws.value.onopen = null;
+      ws.value.onclose = null;
+      ws.value.onerror = null;
+      ws.value.onmessage = null;
+    }
+
     const url = wsUrl();
     ws.value = new WebSocket(url);
 
     ws.value.onopen = () => {
       connected.value = true;
       reconnectAttempts.value = 0;
-      send({ type: 'join', name, roomId });
+      send({ type: 'join', name, roomId, clientId });
       if (pingTimer) clearInterval(pingTimer);
       pingTimer = setInterval(() => send({ type: 'ping' }), 30_000);
       session.isConnected = true;
