@@ -159,24 +159,25 @@ describe('WebSocket protocol', () => {
   it('sends welcome message on join', async () => {
     const msg = await new Promise<any>(resolve => {
       client.on('message', data => resolve(JSON.parse(data.toString())))
-      client.send(JSON.stringify({ type: 'join', name: 'TestUser' }))
+      client.send(JSON.stringify({ type: 'join', name: 'TestUser', roomId: 'test-room', clientId: 'client-1' }))
     })
     expect(msg.type).toBe('welcome')
     expect(msg.userId).toBeDefined()
+    expect(msg.roomId).toBe('test-room')
     expect(Array.isArray(msg.users)).toBe(true)
   })
 
   it('broadcasts user_joined to other connected clients', async () => {
     const client2 = new WebSocket('ws://localhost:9999')
     await new Promise(r => client2.on('open', r))
-    client.send(JSON.stringify({ type: 'join', name: 'Alice' }))
+    client.send(JSON.stringify({ type: 'join', name: 'Alice', roomId: 'test-room', clientId: 'client-1' }))
 
     const msg = await new Promise<any>(resolve => {
       client2.on('message', data => {
         const parsed = JSON.parse(data.toString())
         if (parsed.type === 'user_joined') resolve(parsed)
       })
-      client2.send(JSON.stringify({ type: 'join', name: 'Bob' }))
+      client2.send(JSON.stringify({ type: 'join', name: 'Bob', roomId: 'test-room', clientId: 'client-2' }))
     })
 
     expect(msg.type).toBe('user_joined')
@@ -185,7 +186,7 @@ describe('WebSocket protocol', () => {
   })
 
   it('does not echo sequencer_update back to sender', async () => {
-    client.send(JSON.stringify({ type: 'join', name: 'Alice' }))
+    client.send(JSON.stringify({ type: 'join', name: 'Alice', roomId: 'test-room', clientId: 'client-1' }))
     await new Promise(r => setTimeout(r, 50))
 
     let echoed = false
@@ -240,6 +241,7 @@ Verify on every significant release:
 | Timing drift | Off-beat at BPM > 140 | `setTimeout` instead of lookahead scheduling |
 | Memory leak | Browser slows over time | Oscillator nodes not stopped after note ends |
 | State desync | New user hears wrong notes | Welcome message not including full current state |
+| Ghost/duplicate users | Extra phantom musician on reconnect | Reconnect creates new user before old connection's close event fires; fixed by `clientId`-based eviction |
 | Scale filter regression | Notes outside scale can be placed | Scale state not applied to click handler |
 
 ## Rules

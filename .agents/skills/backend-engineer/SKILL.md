@@ -25,12 +25,15 @@ packages/server/src/
 ├── http/
 │   ├── app.ts            # Express setup, middleware, static file serving
 │   └── routes/
-│       └── health.ts     # GET /health
-└── ws/
-    ├── server.ts         # WebSocketServer attached to HTTP server
-    ├── handler.ts        # Message routing
-    ├── rooms.ts          # Room and session management
-    └── broadcast.ts      # Typed broadcast helpers
+│       └── health.ts     # GET /api/health
+├── ws/
+│   ├── server.ts         # WebSocketServer attached to HTTP server on /ws path
+│   ├── handler.ts        # handleConnection, message handlers, ghost user eviction
+│   ├── rooms.ts          # Room CRUD (getOrCreateRoom, removeUserFromRoom, sanitiseRoomId), per-room globalSettings
+│   └── broadcast.ts      # broadcastToRoom(), broadcastAllToRoom() — room-scoped
+└── state/
+    ├── users.ts          # ServerUser (id, clientId, name, roomId, seq, synth, ws), users Map, getPublicUsers(roomId?)
+    └── defaults.ts       # Default factories: seq, synth, globalSettings, colors
 ```
 
 ## Environment Configuration
@@ -132,19 +135,12 @@ CMD ["node", "packages/server/dist/index.js"]
 
 Apply these to every WebSocket connection handler:
 
-```typescript
-ws.on('message', (raw) => {
-  // Reject oversized messages
-  if (raw.toString().length > 65_536) return
-
-  // Validate and sanitise name on join
-  if (msg.type === 'join') {
-    msg.name = msg.name.slice(0, 20).replace(/[<>]/g, '')
-  }
-
-  // Never trust a client-provided user ID — always use server-assigned ID
-})
-```
+- Reject oversized messages (`raw.toString().length > 65_536`)
+- Sanitise `name` on join: `name.slice(0, config.maxNameLength)`
+- Sanitise `roomId` on join: `sanitiseRoomId()` strips non-`[a-z0-9-_]`, max 48 chars
+- Never trust a client-provided `userId` — always use server-assigned ID
+- Guard against duplicate `join` on the same connection
+- Evict stale sessions by `clientId` before creating a new user (prevents ghost users on reconnect)
 
 ## Future: Redis for Horizontal Scaling
 
