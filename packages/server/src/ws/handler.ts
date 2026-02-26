@@ -33,12 +33,29 @@ function removeUser(id: string): void {
   console.log(`User ${user.name} (${id}) removed from room ${user.roomId}`);
 }
 
-function handleJoin(ws: WebSocket, name: string, requestedRoomId: string): string {
+function evictStaleClient(clientId: string): void {
+  for (const [id, existing] of users) {
+    if (existing.clientId === clientId) {
+      console.log(`Evicting stale session ${existing.name} (${id}) for clientId ${clientId}`);
+      removeUser(id);
+      if (existing.ws.readyState === WebSocket.OPEN || existing.ws.readyState === WebSocket.CONNECTING) {
+        existing.ws.close();
+      }
+      break; // clientId is unique per tab
+    }
+  }
+}
+
+function handleJoin(ws: WebSocket, name: string, requestedRoomId: string, clientId: string): string {
+  // Remove any lingering session for this clientId (reconnect race)
+  evictStaleClient(clientId);
+
   const room = getOrCreateRoom(requestedRoomId);
   const userId = generateId();
 
   const user: ServerUser = {
     id: userId,
+    clientId,
     name: name.slice(0, config.maxNameLength),
     seq: defaultSeqState(),
     synth: defaultSynthState(),
@@ -124,6 +141,14 @@ function handleGlobalSettingsUpdate(userId: string, partial: Partial<GlobalSetti
 
 export function handleConnection(ws: WebSocket): void {
   let userId: string | null = null;
+  let removed = false;
+
+  function cleanUp() {
+    if (userId && !removed) {
+      removed = true;
+      removeUser(userId);
+    }
+  }
 
   ws.on('message', (raw) => {
     let msg: ClientMessage;
@@ -134,7 +159,9 @@ export function handleConnection(ws: WebSocket): void {
     }
 
     if (msg.type === 'join') {
-      userId = handleJoin(ws, msg.name, sanitiseRoomId(msg.roomId));
+      // Guard against duplicate join on the same connection
+      if (userId) return;
+      userId = handleJoin(ws, msg.name, sanitiseRoomId(msg.roomId), msg.clientId);
       return;
     }
 
@@ -172,11 +199,6 @@ export function handleConnection(ws: WebSocket): void {
     }
   });
 
-  ws.on('close', () => {
-    if (userId) removeUser(userId);
-  });
-
-  ws.on('error', () => {
-    if (userId) removeUser(userId);
-  });
+  ws.on('close', cleanUp);
+  ws.on('error', cleanUp);
 }

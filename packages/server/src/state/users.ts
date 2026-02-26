@@ -3,6 +3,7 @@ import type { SeqState, SynthState, PublicUser } from '@beatcord/shared';
 
 export interface ServerUser {
   id: string;
+  clientId: string;
   name: string;
   seq: SeqState;
   synth: SynthState;
