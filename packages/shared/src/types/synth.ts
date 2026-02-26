@@ -12,4 +12,14 @@ export interface SynthState {
   filterQ: number;
   volume: number;
   color: string;
+  /** Delay time in seconds (0–1). */
+  delayTime: number;
+  /** Delay feedback amount (0–0.9). */
+  delayFeedback: number;
+  /** Delay wet/dry mix (0 = dry, 1 = wet). */
+  delayMix: number;
+  /** Reverb wet/dry mix (0 = dry, 1 = wet). */
+  reverbMix: number;
+  /** Reverb impulse-response decay in seconds (0.1–5). */
+  reverbDecay: number;
 }

@@ -55,7 +55,15 @@ function scheduler(): void {
         filterQ: synthStore.filterQ,
         volume: synthStore.volume,
         color: synthStore.color,
+        delayTime: synthStore.delayTime,
+        delayFeedback: synthStore.delayFeedback,
+        delayMix: synthStore.delayMix,
+        reverbMix: synthStore.reverbMix,
+        reverbDecay: synthStore.reverbDecay,
       };
+
+      // Keep persistent effects nodes in sync with latest settings
+      audio.updateEffects(synthSnap);
 
       if (arpStore.enabled && step.notes.length > 0) {
         // Arpeggiate: schedule individual sub-notes

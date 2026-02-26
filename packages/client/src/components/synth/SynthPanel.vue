@@ -3,12 +3,14 @@ import { ref, shallowRef, markRaw } from 'vue';
 import OscillatorTab from '@/components/synth/OscillatorTab.vue';
 import EnvelopeTab from '@/components/synth/EnvelopeTab.vue';
 import FilterTab from '@/components/synth/FilterTab.vue';
+import EffectsTab from '@/components/synth/EffectsTab.vue';
 import ArpeggiatorTab from '@/components/synth/ArpeggiatorTab.vue';
 
 const tabs = [
   { key: 'osc', label: 'Oscillator', component: markRaw(OscillatorTab) },
   { key: 'env', label: 'Envelope', component: markRaw(EnvelopeTab) },
   { key: 'filter', label: 'Filter', component: markRaw(FilterTab) },
+  { key: 'fx', label: 'FX', component: markRaw(EffectsTab) },
   { key: 'arp', label: 'Arp', component: markRaw(ArpeggiatorTab) },
 ] as const;
 
