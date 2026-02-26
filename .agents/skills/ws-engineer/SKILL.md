@@ -17,157 +17,104 @@ You are the WebSocket and real-time systems specialist for Beatcord. You own eve
 
 All messages are JSON. Full type definitions live in `packages/shared/src/types/messages.ts`.
 
-**Client → Server:** `join`, `sequencer_update`, `synth_update`, `step_tick`, `ping`
+**Client → Server:** `join` (`name`, `roomId`, `clientId`), `sequencer_update`, `synth_update`, `step_tick`, `ping`, `chat`, `global_settings_update`
 
-**Server → Client:** `welcome`, `user_joined`, `user_left`, `users_update`, `sequencer_update`, `synth_update`, `step_tick`, `kicked`
+**Server → Client:** `welcome` (`userId`, `roomId`, `users`, `globalSettings`), `user_joined`, `user_left`, `users_update`, `sequencer_update`, `synth_update`, `step_tick`, `kicked`, `chat`, `global_settings_update`
 
-## Critical Fix: wss:// Support
+## wss:// Support (Implemented)
 
-The prototype connects via `ws://` which silently fails on HTTPS deployments. Fix immediately in `useWebSocket.ts`:
+Protocol auto-detection is already implemented in `useWebSocket.ts`:
 
 ```typescript
-const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-const url = `${protocol}//${window.location.host}`
+const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+return `${proto}//${window.location.host}/ws`
 ```
 
-## Client-side Reconnection
+## Client-side Reconnection (Implemented)
 
-Implement exponential backoff reconnection in `useWebSocket.ts`:
+Exponential backoff reconnection is implemented in `useWebSocket.ts`. Key details:
 
-```typescript
-export function useWebSocket() {
-  const ws = shallowRef<WebSocket | null>(null)
-  const connected = ref(false)
-  let reconnectAttempts = 0
-  let reconnectTimer: ReturnType<typeof setTimeout>
-
-  function connect() {
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:'
-    ws.value = new WebSocket(`${protocol}//${location.host}`)
-
-    ws.value.onopen = () => {
-      connected.value = true
-      reconnectAttempts = 0
-      send({ type: 'join', name: sessionStore.name })
-    }
-
-    ws.value.onclose = () => {
-      connected.value = false
-      scheduleReconnect()
-    }
-
-    ws.value.onmessage = (e) => {
-      try {
-        handleMessage(JSON.parse(e.data))
-      } catch {
-        // malformed message — ignore
-      }
-    }
-  }
-
-  function scheduleReconnect() {
-    const delay = Math.min(1000 * 2 ** reconnectAttempts, 30_000)
-    reconnectTimer = setTimeout(() => {
-      reconnectAttempts++
-      connect()
-    }, delay)
-  }
-
-  function send(msg: ClientMessage) {
-    if (ws.value?.readyState === WebSocket.OPEN) {
-      ws.value.send(JSON.stringify(msg))
-    }
-  }
-
-  function disconnect() {
-    clearTimeout(reconnectTimer)
-    ws.value?.close()
-  }
-
-  return { connect, disconnect, send, connected }
-}
-```
-
-## Server-side Message Handler
-
-Structure the server handler as a typed router in `packages/server/src/ws/handler.ts`:
+- `connect(name, roomId)` creates a new WebSocket and sends `join` with `name`, `roomId`, and the module-level `clientId`
+- Before creating a new socket, all handlers (`onopen`/`onclose`/`onerror`/`onmessage`) are detached from the previous dead socket to prevent phantom reconnect loops from stale `onclose` callbacks
+- `scheduleReconnect(name, roomId)` uses exponential backoff: `Math.min(1000 * 2 ** attempts, 30_000)`
+- A stable per-tab `clientId` is generated via `crypto.randomUUID()` at module load and survives reconnects
+- 30s ping keep-alive is started on `onopen` and cleared on `onclose`
 
 ```typescript
-export function handleMessage(
-  raw: string,
-  userId: string,
-  roomId: string
-) {
-  let msg: ClientMessage
-  try {
-    msg = JSON.parse(raw)
-  } catch {
-    return // drop malformed messages
+// Module-level stable identifier
+const clientId = crypto.randomUUID()
+
+function connect(name: string, roomId: string) {
+  // Detach handlers from dead socket first
+  if (ws.value) {
+    ws.value.onopen = null
+    ws.value.onclose = null
+    ws.value.onerror = null
+    ws.value.onmessage = null
   }
-
-  // Reject oversized messages
-  if (raw.length > 65_536) return
-
-  resetInactivityTimer(userId)
-
-  switch (msg.type) {
-    case 'join':           return handleJoin(msg, userId, roomId)
-    case 'sequencer_update': return handleSeqUpdate(msg, userId, roomId)
-    case 'synth_update':   return handleSynthUpdate(msg, userId, roomId)
-    case 'step_tick':      return handleStepTick(msg, userId, roomId)
-    case 'ping':           return // just resets inactivity timer
+  ws.value = new WebSocket(wsUrl())
+  ws.value.onopen = () => {
+    send({ type: 'join', name, roomId, clientId })
+    // ...
   }
 }
 ```
 
-## Server-side Room System
+## Server-side Connection Handler
 
-Add room support so multiple independent sessions can run simultaneously:
+The handler in `packages/server/src/ws/handler.ts` uses a closure-based approach:
+
+- `handleConnection(ws)` is called for each new WebSocket connection
+- A local `userId` variable tracks the user for that connection
+- `join` is handled first, guarded against duplicates (`if (userId) return`)
+- All other message types require an active `userId`
+- `close` and `error` share an idempotent `cleanUp()` with a `removed` flag
+
+### Ghost User Eviction
+
+When a client reconnects, the new `join` triggers `evictStaleClient(clientId)` which:
+1. Finds any existing user with the same `clientId`
+2. Calls `removeUser(id)` to clean up the stale session
+3. Closes the old WebSocket if still open
+4. Breaks after first match (clientId is unique per tab)
+
+This eliminates the race condition where a reconnecting client creates a duplicate before the old connection's `close` event propagates.
+
+## Room System (Implemented)
+
+Multi-room support is fully implemented in `packages/server/src/ws/rooms.ts`:
 
 ```typescript
-// server/src/ws/rooms.ts
 interface Room {
   id: string
-  users: Map<string, ServerUser>
+  userIds: Set<string>
   createdAt: number
-}
-
-const rooms = new Map<string, Room>()
-
-export function getOrCreateRoom(roomId: string): Room {
-  if (!rooms.has(roomId)) {
-    rooms.set(roomId, { id: roomId, users: new Map(), createdAt: Date.now() })
-  }
-  return rooms.get(roomId)!
-}
-
-export function broadcastToRoom(
-  roomId: string,
-  msg: ServerMessage,
-  excludeUserId?: string
-) {
-  const room = rooms.get(roomId)
-  if (!room) return
-  const payload = JSON.stringify(msg)
-  room.users.forEach((user, id) => {
-    if (id !== excludeUserId && user.ws.readyState === WebSocket.OPEN) {
-      user.ws.send(payload)
-    }
-  })
-}
-
-export function removeUser(userId: string, roomId: string) {
-  const room = rooms.get(roomId)
-  if (!room) return
-  room.users.delete(userId)
-  if (room.users.size === 0) rooms.delete(roomId)
+  globalSettings: GlobalSettings  // per-room settings
 }
 ```
 
-Update the `join` message to include a `roomId`:
+Key functions:
+- `sanitiseRoomId(raw)` — lowercases, strips non-`[a-z0-9-_]`, max 48 chars, defaults to `'global'`
+- `getOrCreateRoom(roomId)` — lazy-creates rooms with `defaultGlobalSettings()`
+- `getRoom(roomId)` — returns existing room or `undefined`
+- `removeUserFromRoom(roomId, userId)` — removes user; garbage-collects empty rooms
+
+Broadcast functions in `packages/server/src/ws/broadcast.ts` are room-scoped:
+- `broadcastToRoom(roomId, data, excludeId)` — sends to all users in the room except one
+- `broadcastAllToRoom(roomId, data)` — sends to all users in the room
+
+`getPublicUsers(roomId?)` in `packages/server/src/state/users.ts` filters by room.
+
+The `join` message includes `roomId` and `clientId`:
 
 ```typescript
-{ type: 'join', name: string, roomId: string }
+{ type: 'join', name: string, roomId: string, clientId: string }
+```
+
+The `welcome` response includes the resolved `roomId`:
+
+```typescript
+{ type: 'welcome', userId: string, roomId: string, users: PublicUser[], globalSettings: GlobalSettings }
 ```
 
 ## Server Heartbeat
@@ -220,5 +167,7 @@ function resetInactivityTimer(userId: string) {
 - Never mutate Pinia store state directly from the WS handler — dispatch to store actions
 - All message types must be defined in `packages/shared/src/types/messages.ts`
 - Drop malformed JSON messages silently — never crash the server
-- Server broadcasts must never echo back to the sender — always pass `excludeUserId`
+- Server broadcasts must never echo back to the sender — always pass `excludeUserId` (except `chat` and `global_settings_update` which broadcast to ALL including sender for confirmation)
 - Server-assigned `userId` only — never trust a client-provided user ID
+- Guard against duplicate `join` on the same connection — if `userId` is already set, ignore subsequent joins
+- Always evict stale sessions by `clientId` before creating a new user on `join`

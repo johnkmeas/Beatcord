@@ -25,6 +25,8 @@ The initial migration from the single-file prototype (`index.html` + `server.js`
 - **Arpeggiator** — full arpeggiator with 7 patterns (up, down, up-down, down-up, random, converge, diverge), 6 rates, octave expansion, gate, swing, and 8 presets
 - **Toast notifications** — `useToast.ts` + `ToastContainer.vue` for user join/leave and connection status
 - **Note editor popup** — right-click step header opens `NoteEditor.vue` with per-octave note pills, velocity slider, note length slider
+- **Room/session system** — URL-based room IDs (`/jam/:roomId`), per-room state isolation (global settings, user lists), room creation/joining UI in lobby, auto-cleanup of empty rooms
+- **Ghost user prevention** — stable per-tab `clientId` (`crypto.randomUUID`) sent with `join`; server evicts lingering sessions for same `clientId` on reconnect; idempotent close/error cleanup; dead socket handler detachment prevents phantom reconnect loops
 
 ## Stack
 
@@ -70,10 +72,10 @@ beatcord/
 │   │       ├── ws/
 │   │       │   ├── server.ts       # WebSocketServer on /ws path
 │   │       │   ├── handler.ts      # handleConnection + all named message handlers
-│   │       │   ├── rooms.ts        # Room interface + helpers (placeholder — single global session)
-│   │       │   └── broadcast.ts    # broadcast() and broadcastAll()
+│   │       │   ├── rooms.ts        # Room CRUD — getOrCreateRoom, removeUserFromRoom, sanitiseRoomId, per-room globalSettings
+│   │       │   └── broadcast.ts    # broadcastToRoom() and broadcastAllToRoom()
 │   │       └── state/
-│   │           ├── users.ts        # ServerUser interface, users Map, generateId, getPublicUsers
+│   │           ├── users.ts        # ServerUser interface (id, clientId, name, roomId, seq, synth, ws), users Map, generateId, getPublicUsers(roomId?)
 │   │           └── defaults.ts     # Default factories: seq, synth, globalSettings, colors
 │   └── client/
 │       ├── package.json            # @beatcord/client — vue, pinia, vue-router, vite
@@ -83,10 +85,10 @@ beatcord/
 │       └── src/
 │           ├── main.ts             # createApp + Pinia + Router
 │           ├── App.vue             # <RouterView /> only
-│           ├── router/index.ts     # / → LobbyView, /jam → JamView
+│           ├── router/index.ts     # / → LobbyView, /jam/:roomId → JamView (props: true)
 │           ├── assets/main.css     # Tailwind directives + CSS vars + scrollbar styles
 │           ├── stores/
-│           │   ├── session.ts      # userId, userName, userColor, isConnected, isJoined
+│           │   ├── session.ts      # userId, userName, userColor, roomId, isConnected, isJoined, setRoom()
 │           │   ├── sequencer.ts    # steps, stepCount, bpm, subdiv, playing, currentStep + mutations
 │           │   ├── synth.ts        # All ADSR + filter + waveform + volume + color
 │           │   ├── room.ts         # otherUsers Map, activeSteps Map, userCount
@@ -95,7 +97,7 @@ beatcord/
 │           │   ├── globalSettings.ts  # playing, bpm, stepCount, rootNote, scaleType, masterVolume
 │           │   └── arpeggiator.ts  # Arp state + presets + getSettings()
 │           ├── composables/
-│           │   ├── useWebSocket.ts    # Singleton WS connection, reconnect, ping, message dispatch
+│           │   ├── useWebSocket.ts    # Singleton WS connection, reconnect, ping, message dispatch, per-tab clientId
 │           │   ├── useAudioEngine.ts  # AudioContext, playNote (ADSR), playStep, playNoteNow
 │           │   ├── useSequencer.ts    # Lookahead scheduler, transport (start/stop/toggle), state broadcast
 │           │   ├── usePianoRoll.ts    # Canvas rendering — rows, grid, notes, playhead, keys, header
@@ -123,7 +125,7 @@ beatcord/
 │           │       ├── UserCard.vue        # Name, color, waveform, bpm, note count, LIVE badge
 │           │       └── OtherTrack.vue      # Mini step grid with note dots + playhead outline
 │           └── views/
-│               ├── LobbyView.vue   # Name input → navigate to /jam
+│               ├── LobbyView.vue   # Name input + room ID input + CREATE RANDOM ROOM → navigate to /jam/:roomId
 │               └── JamView.vue     # Full layout — header, sidebar, transport, piano roll, synth, other tracks
 ```
 
@@ -133,7 +135,7 @@ All types defined in `packages/shared/src/types/messages.ts`.
 
 ### Client → Server (`ClientMessage`)
 
-- `join` — `{ name: string }`
+- `join` — `{ name: string, roomId: string, clientId: string }`
 - `sequencer_update` — `{ seq: SeqState }`
 - `synth_update` — `{ synth: SynthState }`
 - `step_tick` — `{ step: number, hasNotes: boolean }`
@@ -143,7 +145,7 @@ All types defined in `packages/shared/src/types/messages.ts`.
 
 ### Server → Client (`ServerMessage`)
 
-- `welcome` — `{ userId, users: PublicUser[], globalSettings: GlobalSettings }`
+- `welcome` — `{ userId, roomId, users: PublicUser[], globalSettings: GlobalSettings }`
 - `user_joined` — `{ user: PublicUser }`
 - `user_left` — `{ userId }`
 - `users_update` — `{ users: PublicUser[] }`
@@ -160,8 +162,22 @@ All types defined in `packages/shared/src/types/messages.ts`.
 `useWebSocket` and `useAudioEngine` use module-level `shallowRef` state — they are singletons. Multiple calls to `useWebSocket()` share the same WebSocket connection. This is intentional to avoid multiple connections.
 
 ### Global vs Per-User State
-- **Global** (synced via `global_settings_update`): playing, bpm, stepCount, rootNote, scaleType, masterVolume
+- **Global** (synced via `global_settings_update`, scoped per-room): playing, bpm, stepCount, rootNote, scaleType, masterVolume
 - **Per-user** (synced via `sequencer_update` / `synth_update`): steps/notes, subdiv, waveform, ADSR, filter, volume, color, arpeggiator settings
+
+### Room System
+- Rooms are identified by URL slug (`/jam/:roomId`) — sanitised to `[a-z0-9-_]`, max 48 chars
+- Each room has its own `globalSettings`, user list, and broadcast scope
+- Empty rooms are automatically garbage-collected when the last user leaves
+- All broadcasts (`broadcastToRoom`, `broadcastAllToRoom`) are scoped to a single room
+- `getPublicUsers(roomId)` returns only users in the specified room
+
+### Ghost User Prevention
+- Each browser tab generates a stable `clientId` via `crypto.randomUUID()` at module load
+- The `clientId` is sent with every `join` message
+- On the server, `evictStaleClient(clientId)` removes any lingering session for the same `clientId` before creating a new user — this eliminates the race condition where a reconnecting client creates a duplicate before the old connection's `close` event fires
+- The client detaches `onopen`/`onclose`/`onerror`/`onmessage` handlers from dead sockets before creating a new one, preventing phantom reconnect loops from stale callbacks
+- Server `close`/`error` cleanup is idempotent via a `removed` flag
 
 ### Audio Scheduling
 The sequencer uses a Web Audio API lookahead scheduler:
@@ -213,7 +229,6 @@ pnpm typecheck        # Type-check all packages
 ## Remaining Work (Priority Order)
 
 ### Next Up
-7. **Room/session system** — rooms.ts is a placeholder. Need URL-based room IDs (`/jam/:roomId`), per-room state isolation, room creation/joining UI in lobby
 8. **Effects chain** — reverb (ConvolverNode) and delay (DelayNode) per-user, with UI controls in a new SynthPanel tab
 9. **Web MIDI input** — `navigator.requestMIDIAccess()` to play notes from hardware controllers
 10. **Mobile touch support** — touch events on canvas, responsive layout adjustments
@@ -222,7 +237,6 @@ pnpm typecheck        # Type-check all packages
 - No Vitest tests exist yet — `generateArpNotes()`, `makeSteps()`, `defaultSeqState()`, scale logic, and message handlers are all testable
 - 2 `as any` casts need proper typing (synth store → SynthState in PianoRoll.vue and NoteEditor.vue)
 - Legacy files (`index.html`, `server.js`) still in repo root — can be removed or moved to a `legacy/` folder
-- `rooms.ts` has Room interface and helpers but is not wired into the handler — handler uses a single global session
 
 ## Specialist Agents
 

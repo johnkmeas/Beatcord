@@ -17,21 +17,29 @@ Everything in `packages/client/src/` — components, views, stores, composables 
 components/
 ├── layout/
 │   ├── AppHeader.vue        # Logo, online count, connection status
-│   └── AppSidebar.vue       # Musician list
+│   ├── AppSidebar.vue       # User list (UserCards) + ChatPanel
+│   ├── ChatPanel.vue        # Chat messages + input
+│   └── ToastContainer.vue   # Fixed-position toast stack (join/leave/connection)
 ├── sequencer/
-│   ├── TransportBar.vue     # Play/Stop, BPM, step count, subdivision
+│   ├── TransportBar.vue     # Play/Stop, Clear, BPM, Steps, Subdiv, ScaleSelector
 │   ├── PianoRoll.vue        # Canvas-based piano roll (main instrument)
-│   ├── NoteEditor.vue       # Per-step popup: notes, velocity, length
+│   ├── NoteEditor.vue       # Per-step popup: octave select, note pills, velocity, length
 │   └── ScaleSelector.vue    # Root note + scale type dropdowns
 ├── synth/
-│   ├── SynthPanel.vue       # Tabbed synth controls
-│   ├── OscillatorTab.vue    # Waveform, volume
-│   ├── EnvelopeTab.vue      # Attack, decay, sustain, release
-│   └── FilterTab.vue        # Cutoff frequency, resonance
+│   ├── SynthPanel.vue       # Tab container (Osc, Env, Filter, Arp)
+│   ├── OscillatorTab.vue    # Waveform select, My Vol, Master Vol
+│   ├── EnvelopeTab.vue      # ADSR sliders
+│   ├── FilterTab.vue        # Cutoff + Resonance sliders
+│   └── ArpeggiatorTab.vue   # Toggle, Preset, Pattern, Rate, Octaves, Gate, Swing
 └── users/
-    ├── UserCard.vue         # Sidebar entry per musician
-    └── OtherTrack.vue       # Mini step grid for other users
+    ├── UserCard.vue         # Name, color, waveform, bpm, note count, LIVE badge
+    └── OtherTrack.vue       # Mini step grid with note dots + playhead outline
 ```
+
+### Views
+
+- `LobbyView.vue` — Name input + room ID input + CREATE RANDOM ROOM button → navigates to `/jam/:roomId`
+- `JamView.vue` — Full layout — header, sidebar, transport, piano roll, synth panel, other user tracks; reads `roomId` from route params
 
 ## PianoRoll Component
 
@@ -110,30 +118,18 @@ export function usePianoRoll(
 
 ## Pinia Stores
 
+Key stores (all in `packages/client/src/stores/`):
+
+- `session.ts` — `userId`, `userName`, `userColor`, **`roomId`**, `isConnected`, `isJoined`, `setIdentity()`, **`setRoom()`**, `reset()`
+- `sequencer.ts` — `steps`, `stepCount`, `bpm`, `subdiv`, `playing`, `currentStep`, `toggleNote()`, `clear()`
+- `synth.ts` — all ADSR + filter + waveform + volume + color
+- `room.ts` — `otherUsers` Map, `activeSteps` Map, `userCount`
+- `scale.ts` — 16 scales, `NOTE_NAMES`, `SCALE_NAMES`, `isInScale()`
+- `chat.ts` — `ChatEntry[]`, `addMessage`, 200 message cap
+- `globalSettings.ts` — `playing`, `bpm`, `stepCount`, `rootNote`, `scaleType`, `masterVolume`
+- `arpeggiator.ts` — arp state + presets + `getSettings()`
+
 ```typescript
-// stores/sequencer.ts
-export const useSequencerStore = defineStore('sequencer', () => {
-  const steps = ref<Step[]>(makeSteps(16))
-  const stepCount = ref<8 | 16 | 32>(16)
-  const bpm = ref(120)
-  const subdiv = ref<1 | 2 | 4>(4)
-  const playing = ref(false)
-  const currentStep = ref(-1)
-
-  function toggleNote(stepIndex: number, midi: number) {
-    const step = steps.value[stepIndex]
-    const idx = step.notes.findIndex(n => n.midi === midi)
-    if (idx >= 0) step.notes.splice(idx, 1)
-    else step.notes.push({ midi, velocity: 100, length: 0.8 })
-  }
-
-  function clear() {
-    steps.value = makeSteps(stepCount.value)
-  }
-
-  return { steps, stepCount, bpm, subdiv, playing, currentStep, toggleNote, clear }
-})
-
 // stores/scale.ts
 export const useScaleStore = defineStore('scale', () => {
   const root = ref(0)
