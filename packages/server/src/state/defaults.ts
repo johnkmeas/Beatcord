@@ -34,6 +34,11 @@ export function defaultSynthState(): SynthState {
     filterQ: 1.5,
     volume: 0.7,
     color: randomColor(),
+    delayTime: 0.3,
+    delayFeedback: 0.3,
+    delayMix: 0,
+    reverbMix: 0,
+    reverbDecay: 1.5,
   };
 }
 
