@@ -8,6 +8,7 @@ import type { GlobalSettings } from './global.js';
 export interface JoinMessage {
   type: 'join';
   name: string;
+  roomId: string;
 }
 
 export interface SequencerUpdateMessage {
@@ -54,6 +55,7 @@ export type ClientMessage =
 export interface WelcomeMessage {
   type: 'welcome';
   userId: string;
+  roomId: string;
   users: PublicUser[];
   globalSettings: GlobalSettings;
 }
