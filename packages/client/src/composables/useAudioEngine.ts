@@ -207,9 +207,9 @@ export function useAudioEngine() {
   /**
    * Play a note immediately (for preview / piano key clicks).
    */
-  function playNoteNow(midi: number, synth: SynthState): void {
+  function playNoteNow(midi: number, synth: SynthState, velocity = 100): void {
     const ctx = init();
-    playNote(midi, 100, 0.3, synth, ctx.currentTime);
+    playNote(midi, velocity, 0.3, synth, ctx.currentTime);
   }
 
   return {
