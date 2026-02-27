@@ -81,7 +81,7 @@ function toggleNote(midi: number) {
   seqStore.toggleNote(props.stepIndex, midi);
   // Play preview if added
   if (activeMidis.value.has(midi) || step.value?.notes.some((n) => n.midi === midi)) {
-    audio.playNoteNow(midi, synthStore.$state as any);
+    audio.playNoteNow(midi, synthStore.getSynthState());
   }
   sequencer.sendSeqUpdate();
 }

@@ -165,7 +165,7 @@ function onPointerDown(e: PointerEvent) {
   // Play preview if note was added
   const step = seqStore.steps[hit.step];
   if (step && step.notes.some((n) => n.midi === hit.midi)) {
-    audio.playNoteNow(hit.midi, synthStore.$state as any);
+    audio.playNoteNow(hit.midi, synthStore.getSynthState());
   }
 
   sequencer.sendSeqUpdate();
