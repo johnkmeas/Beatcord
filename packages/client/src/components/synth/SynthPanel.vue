@@ -5,6 +5,7 @@ import EnvelopeTab from '@/components/synth/EnvelopeTab.vue';
 import FilterTab from '@/components/synth/FilterTab.vue';
 import EffectsTab from '@/components/synth/EffectsTab.vue';
 import ArpeggiatorTab from '@/components/synth/ArpeggiatorTab.vue';
+import MidiTab from '@/components/synth/MidiTab.vue';
 
 const tabs = [
   { key: 'osc', label: 'Oscillator', component: markRaw(OscillatorTab) },
@@ -12,6 +13,7 @@ const tabs = [
   { key: 'filter', label: 'Filter', component: markRaw(FilterTab) },
   { key: 'fx', label: 'FX', component: markRaw(EffectsTab) },
   { key: 'arp', label: 'Arp', component: markRaw(ArpeggiatorTab) },
+  { key: 'midi', label: 'MIDI', component: markRaw(MidiTab) },
 ] as const;
 
 const activeTab = ref<string>('osc');

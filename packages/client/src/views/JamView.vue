@@ -6,6 +6,7 @@ import { useRoomStore } from '@/stores/room';
 import { useSequencer } from '@/composables/useSequencer';
 import { useWebSocket } from '@/composables/useWebSocket';
 import { useAudioEngine } from '@/composables/useAudioEngine';
+import { useMidi } from '@/composables/useMidi';
 
 import AppHeader from '@/components/layout/AppHeader.vue';
 import AppSidebar from '@/components/layout/AppSidebar.vue';
@@ -23,6 +24,7 @@ const room = useRoomStore();
 const sequencer = useSequencer();
 const ws = useWebSocket();
 const audio = useAudioEngine();
+const midi = useMidi();
 
 const editorStep = ref<number | null>(null);
 const editorRect = ref(new DOMRect());
@@ -54,6 +56,7 @@ onMounted(() => {
 onUnmounted(() => {
   sequencer.stop();
   ws.disconnect();
+  midi.disconnect();
 });
 </script>
 
