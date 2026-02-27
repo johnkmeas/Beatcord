@@ -9,132 +9,85 @@ You are the audio engineering specialist for Beatcord. You have deep expertise i
 
 ## Your Domain
 
-- `packages/client/src/composables/useAudioEngine.ts` — primary file
-- `packages/client/src/composables/useSequencer.ts` — scheduling logic
+- `packages/client/src/composables/useAudioEngine.ts` — AudioContext, voice synthesis
+- `packages/client/src/composables/schedulerEngine.ts` — lookahead scheduler singleton
+- `packages/client/src/composables/useSequencer.ts` — transport start/stop, WS broadcast
 - `packages/client/src/composables/useMidi.ts` — Web MIDI (future)
 - `packages/client/src/stores/synth.ts` — synth state
 
 ## Current Audio Architecture
 
-Each note in the prototype creates a fresh node chain and fires on `setTimeout`:
+All audio logic lives in `useAudioEngine.ts`. The scheduler is a separate module (`schedulerEngine.ts`) to avoid circular imports.
+
+### Signal Path Per Voice
 
 ```
-OscillatorNode → BiquadFilterNode → GainNode → AudioContext.destination
+OscillatorNode → BiquadFilterNode (lowpass) → GainNode (ADSR) → AudioContext.destination
 ```
 
-ADSR is implemented via `GainNode.gain` automation. Notes are fire-and-forget with no lookahead — this causes timing drift at high BPMs.
+Each note creates a fresh, independent node chain (fire-and-forget). No shared nodes between concurrent voices.
 
-## Target Architecture
-
-All audio logic moves into `useAudioEngine.ts`:
+### `useAudioEngine.ts` API
 
 ```typescript
-// composables/useAudioEngine.ts
 export function useAudioEngine() {
-  const audioCtx = shallowRef<AudioContext | null>(null)
+  // Singleton AudioContext (module-level shallowRef)
 
-  function init() {
-    // Call on first user gesture to unlock AudioContext
-    if (!audioCtx.value) {
-      audioCtx.value = new AudioContext()
-    }
-    if (audioCtx.value.state === 'suspended') {
-      audioCtx.value.resume()
-    }
-  }
+  function init(): AudioContext
+  // Call on first user gesture to unlock the context.
+  // Safe to call repeatedly.
 
   function playNote(
     midi: number,
     velocity: number,
     noteLength: number,
     synth: SynthState,
-    when: number
-  ) {
-    const ctx = audioCtx.value
-    if (!ctx || ctx.state !== 'running') return
+    when: number,       // AudioContext.currentTime value — exact schedule time
+    masterVolume?: number,
+  ): void
+  // Creates osc → filter → gain, applies ADSR, schedules start/stop.
 
-    const freq = 440 * Math.pow(2, (midi - 69) / 12)
-    const vol = (velocity / 127) * synth.volume * 0.3
+  function playStep(
+    step: StepData,
+    synth: SynthState,
+    when: number,
+    bpm: number,
+    subdiv: number,
+    masterVolume?: number,
+  ): void
+  // Calls playNote() for every note in the step.
 
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    const filter = ctx.createBiquadFilter()
+  function playNoteNow(midi: number, synth: SynthState): void
+  // Preview note at ctx.currentTime (piano key clicks / note editor).
+  // Calls init() automatically.
 
-    osc.type = synth.waveform
-    osc.frequency.value = freq
-    filter.type = 'lowpass'
-    filter.frequency.value = synth.filterFreq
-    filter.Q.value = synth.filterQ
-
-    const releaseStart = when + noteLength
-    gain.gain.setValueAtTime(0, when)
-    gain.gain.linearRampToValueAtTime(vol, when + synth.attack)
-    gain.gain.linearRampToValueAtTime(vol * synth.sustain, when + synth.attack + synth.decay)
-    gain.gain.setValueAtTime(vol * synth.sustain, releaseStart)
-    gain.gain.linearRampToValueAtTime(0, releaseStart + synth.release)
-
-    osc.connect(filter)
-    filter.connect(gain)
-    gain.connect(ctx.destination)
-    osc.start(when)
-    osc.stop(releaseStart + synth.release + 0.05)
-  }
-
-  function playStep(step: Step, synth: SynthState, when: number, bpm: number, subdiv: number) {
-    const beatLength = (60 / bpm) / (subdiv / 4)
-    step.notes.forEach(n => {
-      playNote(n.midi, n.velocity, n.length * beatLength, synth, when)
-    })
-  }
-
-  return { init, playNote, playStep, audioCtx }
+  return { audioCtx, init, playNote, playStep, playNoteNow }
 }
 ```
 
-## Critical Fix: Lookahead Scheduling
+### `schedulerEngine.ts` — Lookahead Scheduler
 
-Replace `setTimeout`-based step firing with proper Web Audio scheduling in `useSequencer.ts`:
+Plain module (not a Vue composable) to avoid circular imports with `useWebSocket`.
 
 ```typescript
-const LOOKAHEAD = 0.1         // schedule 100ms ahead
-const SCHEDULE_INTERVAL = 25  // check every 25ms
+const LOOKAHEAD = 0.1;        // schedule 100ms into the future
+const SCHEDULE_INTERVAL = 25; // check every 25ms
 
-let schedulerTimer: ReturnType<typeof setTimeout>
-let nextStepTime = 0
-let currentStep = 0
-
-function scheduler() {
-  const ctx = audioCtx.value
-  if (!ctx) return
-
-  while (nextStepTime < ctx.currentTime + LOOKAHEAD) {
-    // Schedule audio at exact time
-    playStep(steps[currentStep], synth, nextStepTime, bpm, subdiv)
-
-    // Broadcast tick to other users at the right moment
-    const delay = (nextStepTime - ctx.currentTime) * 1000
-    const stepSnapshot = currentStep
-    setTimeout(() => broadcastTick(stepSnapshot), Math.max(0, delay))
-
-    // Advance
-    nextStepTime += (60 / bpm) / (subdiv / 4)
-    currentStep = (currentStep + 1) % stepCount
-  }
-
-  schedulerTimer = setTimeout(scheduler, SCHEDULE_INTERVAL)
-}
-
-function start() {
-  nextStepTime = audioCtx.value!.currentTime
-  scheduler()
-}
-
-function stop() {
-  clearTimeout(schedulerTimer)
-}
+export function startScheduler(): void  // init AudioContext, begin scheduler loop
+export function stopScheduler(): void   // cancel loop, reset currentStep to -1
+export function isSchedulerRunning(): boolean
+export function setStepTickCallback(
+  cb: (step: number, hasNotes: boolean) => void
+): void  // called by useSequencer to send step_tick WS messages
 ```
 
-## Synth State
+The scheduler loop:
+1. Reads `globals.bpm`, `seqStore.steps`, `synthStore`, `arpStore` each tick
+2. While `nextStepTime < ctx.currentTime + LOOKAHEAD`: schedules all notes for the step
+3. Uses `setTimeout` (aligned to schedule time) to update `seqStore.currentStep` and call `onStepTick`
+4. Calls itself recursively via `setTimeout(scheduler, SCHEDULE_INTERVAL)`
+
+### Synth State
 
 ```typescript
 interface SynthState {
@@ -150,15 +103,22 @@ interface SynthState {
 }
 ```
 
+Use `synthStore.getSynthState()` to get a typed `SynthState` snapshot — never use `synthStore.$state as any`.
+
 ## Future: Effects Chain
 
-Add post-processing nodes between the voice gain and destination:
+Next feature on the roadmap. Add post-processing nodes between the voice gain and destination:
 
 ```
-GainNode (voice) → DelayNode → ConvolverNode (reverb) → DynamicsCompressorNode → destination
+GainNode (voice) → [effects input] → DelayNode → ConvolverNode (reverb) → DynamicsCompressorNode → destination
 ```
 
-Use `OfflineAudioContext` to render impulse responses for the reverb convolver. Expose wet/dry mix and delay time via `SynthState` extensions.
+Implementation approach:
+- Add persistent effects nodes to `useAudioEngine.ts` (created once, not per-voice)
+- Expose wet/dry mix and delay time as new fields on `SynthState` (add to `packages/shared/src/types/synth.ts`)
+- Add an `updateEffects()` function to wire/rewire the node graph when settings change
+- Use `OfflineAudioContext` to render impulse responses for the reverb `ConvolverNode`
+- Add a new **FX** tab to `SynthPanel.vue` (alongside Osc, Env, Filter, Arp)
 
 ## Future: Additional Synthesis Modes
 
@@ -182,7 +142,9 @@ export function useMidi() {
     const [status, note, velocity] = event.data
     const isNoteOn = (status & 0xf0) === 0x90 && velocity > 0
     if (isNoteOn) {
-      audioEngine.playNote(note, velocity, 0.5, synthStore.state, audioCtx.currentTime)
+      const audio = useAudioEngine()
+      const synthStore = useSynthStore()
+      audio.playNoteNow(note, synthStore.getSynthState())
     }
   }
 
@@ -197,3 +159,5 @@ export function useMidi() {
 - Always check `audioCtx.state === 'running'` before scheduling
 - Always unlock `AudioContext` on the first user gesture — browsers block autoplay
 - Each note voice is fully independent — no shared nodes between concurrent voices
+- Use `synthStore.getSynthState()` for a typed `SynthState` snapshot — never `$state as any`
+- When adding effects nodes: they are persistent singletons on the AudioContext — do not recreate them per note
