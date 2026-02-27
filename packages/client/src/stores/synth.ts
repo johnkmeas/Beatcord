@@ -12,6 +12,11 @@ export const useSynthStore = defineStore('synth', () => {
   const filterQ = ref(1.5);
   const volume = ref(0.7);
   const color = ref('#ff6b6b');
+  const delayTime = ref(0.3);
+  const delayFeedback = ref(0.3);
+  const delayMix = ref(0);
+  const reverbMix = ref(0);
+  const reverbDecay = ref(1.5);
 
   function getSynthState(): SynthState {
     return {
@@ -24,6 +29,11 @@ export const useSynthStore = defineStore('synth', () => {
       filterQ: filterQ.value,
       volume: volume.value,
       color: color.value,
+      delayTime: delayTime.value,
+      delayFeedback: delayFeedback.value,
+      delayMix: delayMix.value,
+      reverbMix: reverbMix.value,
+      reverbDecay: reverbDecay.value,
     };
   }
 
@@ -37,6 +47,11 @@ export const useSynthStore = defineStore('synth', () => {
     filterQ,
     volume,
     color,
+    delayTime,
+    delayFeedback,
+    delayMix,
+    reverbMix,
+    reverbDecay,
     getSynthState,
   };
 });

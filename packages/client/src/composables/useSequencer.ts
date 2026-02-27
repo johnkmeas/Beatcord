@@ -58,6 +58,11 @@ export function useSequencer() {
       filterQ: synthStore.filterQ,
       volume: synthStore.volume,
       color: synthStore.color,
+      delayTime: synthStore.delayTime,
+      delayFeedback: synthStore.delayFeedback,
+      delayMix: synthStore.delayMix,
+      reverbMix: synthStore.reverbMix,
+      reverbDecay: synthStore.reverbDecay,
     };
   }
 
