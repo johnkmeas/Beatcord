@@ -34,7 +34,7 @@ The initial migration from the single-file prototype (`index.html` + `server.js`
 - **Backend** — Node.js 20, Express 4, `ws` 8, TypeScript 5.4
 - **Monorepo** — pnpm 9.15.5 workspaces
 - **Shared types** — `@beatcord/shared` with TypeScript interfaces for all messages and state shapes
-- **Testing** — Vitest (configured but no tests written yet)
+- **Testing** — Vitest with 4 test files (arpeggiator, scale, defaults, globalSettings)
 - **Deployment** — Railway via multi-stage Dockerfile; health check at `/api/health`
 
 ## Project Structure (Current)
@@ -99,7 +99,8 @@ beatcord/
 │           ├── composables/
 │           │   ├── useWebSocket.ts    # Singleton WS connection, reconnect, ping, message dispatch, per-tab clientId
 │           │   ├── useAudioEngine.ts  # AudioContext, playNote (ADSR), playStep, playNoteNow
-│           │   ├── useSequencer.ts    # Lookahead scheduler, transport (start/stop/toggle), state broadcast
+│           │   ├── schedulerEngine.ts # Lookahead scheduler singleton (split from useSequencer to avoid circ-dep)
+│           │   ├── useSequencer.ts    # Transport (start/stop/toggle), state broadcast — delegates timing to schedulerEngine
 │           │   ├── usePianoRoll.ts    # Canvas rendering — rows, grid, notes, playhead, keys, header
 │           │   ├── useScale.ts        # snapToScale() helper
 │           │   ├── useToast.ts        # Toast notifications with auto-dismiss
@@ -116,7 +117,7 @@ beatcord/
 │           │   │   ├── NoteEditor.vue      # Popup — octave select, note pills, velocity, length
 │           │   │   └── ScaleSelector.vue   # Root note + scale type dropdowns
 │           │   ├── synth/
-│           │   │   ├── SynthPanel.vue      # Tab container (Osc, Env, Filter, Arp)
+│           │   │   ├── SynthPanel.vue      # Tab container (Osc, Env, Filter, Arp) — FX tab planned next
 │           │   │   ├── OscillatorTab.vue   # Waveform select, My Vol, Master Vol
 │           │   │   ├── EnvelopeTab.vue     # ADSR sliders
 │           │   │   ├── FilterTab.vue       # Cutoff + Resonance sliders
@@ -180,11 +181,12 @@ All types defined in `packages/shared/src/types/messages.ts`.
 - Server `close`/`error` cleanup is idempotent via a `removed` flag
 
 ### Audio Scheduling
-The sequencer uses a Web Audio API lookahead scheduler:
+The sequencer uses a Web Audio API lookahead scheduler in `schedulerEngine.ts` (a plain module, not a Vue composable — split from `useSequencer.ts` to break a circular import with `useWebSocket`):
 - `LOOKAHEAD = 0.1s` — schedules notes 100ms into the future
 - `SCHEDULE_INTERVAL = 25ms` — checks for notes to schedule every 25ms
 - Notes are scheduled at exact `AudioContext.currentTime` values for drift-free playback
 - `step_tick` messages are sent via `setTimeout` aligned with the scheduled play time
+- `useSequencer.ts` manages transport start/stop and WS broadcast; it delegates all timing to `schedulerEngine.ts`
 
 ### Canvas Piano Roll
 - All rendering in `usePianoRoll.ts` (composable, not component)
@@ -210,6 +212,10 @@ pnpm build            # Build all packages in order (shared → client → serve
 pnpm start            # Run production server (serves client dist)
 pnpm test             # Vitest
 pnpm typecheck        # Type-check all packages
+pnpm lint             # ESLint
+pnpm lint:fix         # ESLint with auto-fix
+pnpm format           # Prettier
+pnpm verify           # lint + typecheck + test — run before committing
 ```
 
 ## How to Work
@@ -234,9 +240,8 @@ pnpm typecheck        # Type-check all packages
 10. **Mobile touch support** — touch events on canvas, responsive layout adjustments
 
 ### Technical Debt
-- No Vitest tests exist yet — `generateArpNotes()`, `makeSteps()`, `defaultSeqState()`, scale logic, and message handlers are all testable
-- 2 `as any` casts need proper typing (synth store → SynthState in PianoRoll.vue and NoteEditor.vue)
-- Legacy files (`index.html`, `server.js`) still in repo root — can be removed or moved to a `legacy/` folder
+- Tests exist for pure functions (arpeggiator, scale, defaults, globalSettings) but `ws/handler.ts` and `schedulerEngine.ts` still lack coverage
+- Legacy files (`index.html`, `server.js`) in `legacy/` folder — reference only, not active code
 
 ## Specialist Agents
 

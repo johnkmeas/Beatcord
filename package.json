@@ -11,6 +11,9 @@
     "build": "pnpm --filter @beatcord/shared build && pnpm --filter @beatcord/client build && pnpm --filter @beatcord/server build",
     "start": "node packages/server/dist/index.js",
     "lint": "eslint packages --ext .ts,.vue",
+    "lint:fix": "eslint packages --ext .ts,.vue --fix",
+    "format": "prettier --write \"packages/**/*.{ts,vue}\"",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test",
     "test": "vitest run",
     "typecheck": "pnpm --filter @beatcord/shared build && pnpm -r typecheck"
   },
@@ -19,8 +22,11 @@
     "@typescript-eslint/parser": "^7.0.0",
     "concurrently": "^8.2.0",
     "eslint": "^8.57.0",
+    "eslint-plugin-vue": "^9.33.0",
+    "prettier": "^3.3.0",
     "typescript": "^5.4.0",
-    "vitest": "^1.6.0"
+    "vitest": "^1.6.0",
+    "vue-eslint-parser": "^9.4.3"
   },
   "engines": {
     "node": ">=20.0.0"
